@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LockKeyhole, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -18,14 +24,6 @@ export function VaultPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    const vaultCreated = localStorage.getItem(VAULT_CREATED_KEY);
-
-    if (vaultCreated === "true") {
-      setMode("unlock");
-    }
-  }, []);
 
   function resetErrors() {
     setError("");
@@ -60,7 +58,6 @@ export function VaultPassword() {
     setPassword("");
     setConfirmPassword("");
     setIsLoading(false);
-
     setMode("unlock");
   }
 
@@ -81,7 +78,7 @@ export function VaultPassword() {
     setIsLoading(false);
 
     setError(
-      "Password verification will be enabled in the encryption step."
+      "Password verification will be enabled in the encryption step.",
     );
   }
 
