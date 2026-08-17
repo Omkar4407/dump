@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
-import { VaultPassword } from "@/components/vault/vault-password";
+import { VaultApp } from "@/components/vault/vault-app";
 
 export default async function VaultPage() {
   const session = await auth();
@@ -9,6 +9,11 @@ export default async function VaultPage() {
   if (!session?.user) {
     redirect("/");
   }
+
+  const userId =
+    session.user.email ??
+    session.user.id ??
+    "unknown-user";
 
   return (
     <main className="min-h-screen bg-background">
@@ -24,7 +29,7 @@ export default async function VaultPage() {
         </div>
       </header>
 
-      <VaultPassword />
+      <VaultApp userId={userId} />
     </main>
   );
 }
