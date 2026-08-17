@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { SignInButton } from "@/components/auth/sign-in-button";
 
 export default function Home() {
   return (
@@ -9,9 +9,7 @@ export default function Home() {
             DUMP
           </div>
 
-          <Button variant="outline">
-            Sign in
-          </Button>
+          <SignInButton />
         </header>
 
         <section className="flex flex-1 flex-col items-center justify-center pb-24 text-center">
@@ -34,9 +32,7 @@ export default function Home() {
             </p>
 
             <div className="mt-8 flex justify-center">
-              <Button size="lg">
-                Continue with Google
-              </Button>
+              <SignInButton />
             </div>
           </div>
         </section>
