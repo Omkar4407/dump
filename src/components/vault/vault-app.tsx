@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useState } from "react";
 import {
   LockKeyhole,
   Plus,
@@ -21,21 +18,24 @@ import {
 import { Input } from "@/components/ui/input";
 
 import {
-  decryptDUMPVault,
-  encryptDUMPVault,
-  createEmptyVault,
-  createMemory,
-  addMemory,
-} from "@/lib/vault/vault";
+  decryptVault,
+  encryptVault,
+  type EncryptedVault,
+} from "@/lib/crypto/vault";
 
 import {
-  getEncryptedVault,
-  saveEncryptedVault,
-} from "@/lib/vault/storage";
+  loadRemoteVault,
+  createRemoteVault,
+  updateRemoteVault,
+} from "@/lib/vault/remote";
 
-import type { Vault } from "@/types/memory";
+import type {
+  Memory,
+  Vault,
+} from "@/types/memory";
 
 type VaultStatus =
+  | "loading"
   | "create"
   | "unlock"
   | "unlocked";
@@ -44,54 +44,11 @@ type VaultAppProps = {
   userId: string;
 };
 
-function getStorageKey(userId: string) {
-  return `dump-encrypted-vault:${userId}`;
-}
-
-function subscribeToStorage(
-  callback: () => void,
-) {
-  window.addEventListener(
-    "storage",
-    callback,
-  );
-
-  return () => {
-    window.removeEventListener(
-      "storage",
-      callback,
-    );
-  };
-}
-
-function getVaultExists(
-  userId: string,
-) {
-  return (
-    localStorage.getItem(
-      getStorageKey(userId),
-    ) !== null
-  );
-}
-
-function getServerVaultExists() {
-  return false;
-}
-
 export function VaultApp({
   userId,
 }: VaultAppProps) {
-  const vaultExists =
-    useSyncExternalStore(
-      subscribeToStorage,
-      () => getVaultExists(userId),
-      getServerVaultExists,
-    );
-
   const [status, setStatus] =
-    useState<VaultStatus | null>(
-      null,
-    );
+    useState<VaultStatus>("loading");
 
   const [password, setPassword] =
     useState("");
@@ -104,6 +61,14 @@ export function VaultApp({
   const [vault, setVault] =
     useState<Vault | null>(null);
 
+  const [
+    encryptedVault,
+    setEncryptedVault,
+  ] =
+    useState<EncryptedVault | null>(
+      null,
+    );
+
   const [error, setError] =
     useState("");
 
@@ -113,11 +78,51 @@ export function VaultApp({
   const [search, setSearch] =
     useState("");
 
-  const currentStatus =
-    status ??
-    (vaultExists
-      ? "unlock"
-      : "create");
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVault() {
+      try {
+        setError("");
+
+        const result =
+          await loadRemoteVault();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!result.exists) {
+          setStatus("create");
+          return;
+        }
+
+        setEncryptedVault(
+          result.vault,
+        );
+
+        setStatus("unlock");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load your vault.",
+        );
+
+        setStatus("unlock");
+      }
+    }
+
+    loadVault();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   async function handleCreateVault() {
     setError("");
@@ -149,26 +154,32 @@ export function VaultApp({
     setIsLoading(true);
 
     try {
-      const newVault =
-        createEmptyVault();
+      const newVault: Vault = {
+        version: 1,
+        memories: [],
+      };
 
       const encrypted =
-        await encryptDUMPVault(
+        await encryptVault(
           password,
           newVault,
         );
 
-      saveEncryptedVault(
-        userId,
+      await createRemoteVault(
         encrypted,
       );
 
       setVault(newVault);
+      setEncryptedVault(
+        encrypted,
+      );
       setConfirmPassword("");
       setStatus("unlocked");
-    } catch {
+    } catch (error) {
       setError(
-        "Unable to create your vault.",
+        error instanceof Error
+          ? error.message
+          : "Unable to create your vault.",
       );
     } finally {
       setIsLoading(false);
@@ -185,14 +196,10 @@ export function VaultApp({
       return;
     }
 
-    const encryptedVault =
-      getEncryptedVault(userId);
-
     if (!encryptedVault) {
       setError(
-        "No vault was found.",
+        "No encrypted vault was found.",
       );
-      setStatus("create");
       return;
     }
 
@@ -200,16 +207,29 @@ export function VaultApp({
 
     try {
       const decrypted =
-        await decryptDUMPVault(
+        await decryptVault<Vault>(
           password,
           encryptedVault,
         );
 
+      if (
+        decrypted.version !== 1 ||
+        !Array.isArray(
+          decrypted.memories,
+        )
+      ) {
+        throw new Error(
+          "Invalid vault format.",
+        );
+      }
+
       setVault(decrypted);
       setStatus("unlocked");
-    } catch {
+    } catch (error) {
       setError(
-        "Incorrect vault password.",
+        error instanceof Error
+          ? error.message
+          : "Incorrect vault password.",
       );
     } finally {
       setIsLoading(false);
@@ -224,36 +244,53 @@ export function VaultApp({
       return;
     }
 
-    try {
-      const memory =
-        createMemory(
-          "Text",
-          "This is a DUMP memory.",
-          "My first memory stored in DUMP",
-        );
+    setError("");
+    setIsLoading(true);
 
-      const updatedVault =
-        addMemory(
-          vault,
+    try {
+      const now =
+        new Date().toISOString();
+
+      const memory: Memory = {
+        id: crypto.randomUUID(),
+        type: "Text",
+        data: "This is a DUMP memory.",
+        description:
+          "My first memory stored in DUMP",
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const updatedVault: Vault = {
+        ...vault,
+        memories: [
+          ...vault.memories,
           memory,
-        );
+        ],
+      };
 
       const encrypted =
-        await encryptDUMPVault(
+        await encryptVault(
           password,
           updatedVault,
         );
 
-      saveEncryptedVault(
-        userId,
+      await updateRemoteVault(
         encrypted,
       );
 
       setVault(updatedVault);
-    } catch {
-      setError(
-        "Unable to save the memory.",
+      setEncryptedVault(
+        encrypted,
       );
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save the memory.",
+      );
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -263,6 +300,7 @@ export function VaultApp({
     setConfirmPassword("");
     setSearch("");
     setError("");
+
     setStatus("unlock");
   }
 
@@ -276,12 +314,26 @@ export function VaultApp({
           ),
     ) ?? [];
 
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-6 py-12">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex min-h-48 items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              Loading your vault...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (
-    currentStatus === "create" ||
-    currentStatus === "unlock"
+    status === "create" ||
+    status === "unlock"
   ) {
     const isCreate =
-      currentStatus === "create";
+      status === "create";
 
     return (
       <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-6 py-12">
@@ -416,6 +468,7 @@ export function VaultApp({
           </div>
 
           <Button
+            disabled={isLoading}
             onClick={
               handleAddTestMemory
             }
@@ -424,6 +477,12 @@ export function VaultApp({
             Add Test Memory
           </Button>
         </div>
+
+        {error && (
+          <p className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         {filteredMemories.length ===
         0 ? (
