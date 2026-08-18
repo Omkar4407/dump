@@ -9,3 +9,10 @@ declare module "next-auth/jwt" {
     googleTokenError?: string;
   }
 }
+
+declare module "next-auth" {
+  interface Session {
+    googleAccessToken?: string;
+    googleTokenError?: string;
+  }
+}

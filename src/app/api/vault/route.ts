@@ -12,7 +12,8 @@ import {
 import type { EncryptedVault } from "@/lib/crypto/vault";
 
 type VaultRequestBody = {
-  vault?: EncryptedVault;
+  vault?: unknown;
+  fileId?: unknown;
 };
 
 function isValidEncryptedVault(
@@ -26,23 +27,52 @@ function isValidEncryptedVault(
   }
 
   const vault =
-    value as Record<string, unknown>;
+    value as Record<
+      string,
+      unknown
+    >;
 
   return (
     vault.version === 1 &&
-    typeof vault.salt === "string" &&
-    typeof vault.iv === "string" &&
-    typeof vault.ciphertext === "string"
+    typeof vault.salt ===
+      "string" &&
+    typeof vault.iv ===
+      "string" &&
+    typeof vault.ciphertext ===
+      "string"
   );
 }
 
-export async function GET() {
-  const session = await auth();
+function isValidFileId(
+  value: unknown,
+): value is string {
+  return (
+    typeof value ===
+      "string" &&
+    value.trim().length > 0
+  );
+}
+
+async function requireAuth() {
+  const session =
+    await auth();
 
   if (!session?.user) {
+    return null;
+  }
+
+  return session;
+}
+
+export async function GET() {
+  const session =
+    await requireAuth();
+
+  if (!session) {
     return NextResponse.json(
       {
-        error: "Unauthorized",
+        error:
+          "Unauthorized",
       },
       {
         status: 401,
@@ -68,12 +98,13 @@ export async function GET() {
     let vault: unknown;
 
     try {
-      vault = JSON.parse(content);
+      vault =
+        JSON.parse(content);
     } catch {
       return NextResponse.json(
         {
           error:
-            "The DUMP vault file is invalid.",
+            "The DUMP vault file contains invalid JSON.",
         },
         {
           status: 500,
@@ -82,7 +113,9 @@ export async function GET() {
     }
 
     if (
-      !isValidEncryptedVault(vault)
+      !isValidEncryptedVault(
+        vault,
+      )
     ) {
       return NextResponse.json(
         {
@@ -97,11 +130,12 @@ export async function GET() {
 
     return NextResponse.json({
       exists: true,
+      fileId: file.id,
       vault,
     });
   } catch (error) {
     console.error(
-      "Failed to load DUMP vault:",
+      "DUMP vault GET error:",
       error,
     );
 
@@ -122,12 +156,14 @@ export async function GET() {
 export async function POST(
   request: Request,
 ) {
-  const session = await auth();
+  const session =
+    await requireAuth();
 
-  if (!session?.user) {
+  if (!session) {
     return NextResponse.json(
       {
-        error: "Unauthorized",
+        error:
+          "Unauthorized",
       },
       {
         status: 401,
@@ -155,10 +191,10 @@ export async function POST(
       );
     }
 
-    const existingFile =
+    const existing =
       await findUserVaultFile();
 
-    if (existingFile) {
+    if (existing) {
       return NextResponse.json(
         {
           error:
@@ -183,7 +219,7 @@ export async function POST(
     });
   } catch (error) {
     console.error(
-      "Failed to create DUMP vault:",
+      "DUMP vault POST error:",
       error,
     );
 
@@ -204,12 +240,14 @@ export async function POST(
 export async function PUT(
   request: Request,
 ) {
-  const session = await auth();
+  const session =
+    await requireAuth();
 
-  if (!session?.user) {
+  if (!session) {
     return NextResponse.json(
       {
-        error: "Unauthorized",
+        error:
+          "Unauthorized",
       },
       {
         status: 401,
@@ -237,14 +275,38 @@ export async function PUT(
       );
     }
 
-    const existingFile =
-      await findUserVaultFile();
-
-    if (!existingFile) {
+    if (
+      !isValidFileId(
+        body.fileId,
+      )
+    ) {
       return NextResponse.json(
         {
           error:
-            "DUMP vault does not exist.",
+            "Vault file ID is required.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    /*
+     * Verify that the supplied ID is actually
+     * the user's current DUMP vault.
+     *
+     * We search only when validating the ID.
+     * The normal successful path remains a
+     * direct file update.
+     */
+    const currentFile =
+      await findUserVaultFile();
+
+    if (!currentFile) {
+      return NextResponse.json(
+        {
+          error:
+            "DUMP vault no longer exists.",
         },
         {
           status: 404,
@@ -252,9 +314,24 @@ export async function PUT(
       );
     }
 
+    if (
+      currentFile.id !==
+      body.fileId
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Vault file ID is stale.",
+        },
+        {
+          status: 409,
+        },
+      );
+    }
+
     const file =
       await updateUserVaultFile(
-        existingFile.id,
+        body.fileId,
         JSON.stringify(
           body.vault,
         ),
@@ -266,7 +343,7 @@ export async function PUT(
     });
   } catch (error) {
     console.error(
-      "Failed to update DUMP vault:",
+      "DUMP vault PUT error:",
       error,
     );
 

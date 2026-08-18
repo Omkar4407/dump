@@ -1,83 +1,133 @@
 import type { EncryptedVault } from "@/lib/crypto/vault";
 
-type VaultResponse =
+export type VaultResponse =
   | {
       exists: false;
     }
   | {
       exists: true;
+      fileId: string;
       vault: EncryptedVault;
     };
 
-async function parseResponse(
-  response: Response,
-) {
-  const data = await response.json();
+export type VaultMutationResponse = {
+  success: true;
+  fileId: string;
+};
 
-  if (!response.ok) {
+export class VaultFileNotFoundError
+  extends Error {
+  constructor() {
+    super(
+      "DUMP vault file was not found.",
+    );
+
+    this.name =
+      "VaultFileNotFoundError";
+  }
+}
+
+async function parseResponse<T>(
+  response: Response,
+): Promise<T> {
+  let data: unknown;
+
+  try {
+    data = await response.json();
+  } catch {
     throw new Error(
-      data?.error ??
-        "Vault request failed.",
+      "Vault server returned an invalid response.",
     );
   }
 
-  return data;
+  if (!response.ok) {
+    if (
+      response.status === 404
+    ) {
+      throw new VaultFileNotFoundError();
+    }
+
+    const error =
+      typeof data === "object" &&
+      data !== null &&
+      "error" in data &&
+      typeof (
+        data as {
+          error?: unknown;
+        }
+      ).error === "string"
+        ? (
+            data as {
+              error: string;
+            }
+          ).error
+        : "Vault request failed.";
+
+    throw new Error(error);
+  }
+
+  return data as T;
 }
 
 export async function loadRemoteVault(): Promise<VaultResponse> {
-  const response = await fetch(
-    "/api/vault",
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
+  const response =
+    await fetch(
+      "/api/vault",
+      {
+        method: "GET",
+        cache: "no-store",
+      },
+    );
 
-  return parseResponse(
+  return parseResponse<VaultResponse>(
     response,
   );
 }
 
 export async function createRemoteVault(
   vault: EncryptedVault,
-) {
-  const response = await fetch(
-    "/api/vault",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json",
+): Promise<VaultMutationResponse> {
+  const response =
+    await fetch(
+      "/api/vault",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          vault,
+        }),
       },
-      body: JSON.stringify({
-        vault,
-      }),
-    },
-  );
+    );
 
-  return parseResponse(
+  return parseResponse<VaultMutationResponse>(
     response,
   );
 }
 
 export async function updateRemoteVault(
+  fileId: string,
   vault: EncryptedVault,
-) {
-  const response = await fetch(
-    "/api/vault",
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type":
-          "application/json",
+): Promise<VaultMutationResponse> {
+  const response =
+    await fetch(
+      "/api/vault",
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          fileId,
+          vault,
+        }),
       },
-      body: JSON.stringify({
-        vault,
-      }),
-    },
-  );
+    );
 
-  return parseResponse(
+  return parseResponse<VaultMutationResponse>(
     response,
   );
 }
