@@ -15,6 +15,12 @@ const DUMP_VAULT_MIME_TYPE =
 const DUMP_ATTACHMENT_PREFIX =
   "DUMP Attachment";
 
+const DUMP_ATTACHMENT_TYPE =
+  "attachment";
+
+const MAX_ATTACHMENT_SIZE =
+  100 * 1024 * 1024 + 16;
+
 type DriveFile = {
   id: string;
   name: string;
@@ -46,9 +52,59 @@ export type DriveAttachmentFile = {
 function createAuthorizationHeader(
   accessToken: string,
 ) {
+  if (
+    typeof accessToken !==
+      "string" ||
+    !accessToken.trim()
+  ) {
+    throw new Error(
+      "Google Drive authorization is unavailable.",
+    );
+  }
+
   return {
-    Authorization: `Bearer ${accessToken}`,
+    Authorization:
+      `Bearer ${accessToken}`,
   };
+}
+
+function validateDriveFileId(
+  fileId: string,
+): void {
+  if (
+    typeof fileId !==
+      "string" ||
+    !fileId ||
+    fileId.length >
+      500 ||
+    !/^[A-Za-z0-9_-]+$/.test(
+      fileId,
+    )
+  ) {
+    throw new Error(
+      "Invalid Google Drive file ID.",
+    );
+  }
+}
+
+function validateAttachmentId(
+  attachmentId: string,
+): void {
+  if (
+    typeof attachmentId !==
+      "string" ||
+    attachmentId.length <
+      10 ||
+    attachmentId.length >
+      100 ||
+    !/^[A-Za-z0-9_-]+$/.test(
+      attachmentId,
+    )
+  ) {
+    throw new Error(
+      "Invalid attachment ID.",
+    );
+  }
 }
 
 async function handleDriveResponse(
@@ -68,27 +124,69 @@ async function handleDriveResponse(
     errorText,
   );
 
-  if (response.status === 401) {
+  if (
+    response.status ===
+    401
+  ) {
     throw new Error(
-      `Google Drive authorization has expired. ${errorText}`,
+      "Google Drive authorization has expired.",
     );
   }
 
-  if (response.status === 403) {
+  if (
+    response.status ===
+    403
+  ) {
     throw new Error(
-      `Google Drive access was denied. ${errorText}`,
+      "Google Drive access was denied.",
     );
   }
 
-  if (response.status === 404) {
+  if (
+    response.status ===
+    404
+  ) {
     throw new Error(
-      `Google Drive file was not found. ${errorText}`,
+      "Google Drive file was not found.",
     );
   }
 
   throw new Error(
-    `Google Drive ${operation} failed (${response.status}): ${errorText}`,
+    `Google Drive ${operation} failed (${response.status}).`,
   );
+}
+
+function validateDumpAttachment(
+  file: DriveFile,
+): void {
+  if (
+    file.appProperties
+      ?.dumpType !==
+    DUMP_ATTACHMENT_TYPE
+  ) {
+    throw new Error(
+      "The requested Drive file is not a DUMP attachment.",
+    );
+  }
+
+  if (
+    !file.appProperties
+      ?.dumpAttachmentId
+  ) {
+    throw new Error(
+      "The requested Drive file is not a valid DUMP attachment.",
+    );
+  }
+
+  if (
+    !file.name.startsWith(
+      `${DUMP_ATTACHMENT_PREFIX} `,
+    )
+  ) {
+    throw new Error(
+      "The requested Drive file is not a valid DUMP attachment.",
+    );
+  }
 }
 
 export async function findVaultFile(
@@ -123,17 +221,18 @@ export async function findVaultFile(
     "files(id,name,mimeType)",
   );
 
-  const response = await fetch(
-    url.toString(),
-    {
-      method: "GET",
-      headers:
-        createAuthorizationHeader(
-          accessToken,
-        ),
-      cache: "no-store",
-    },
-  );
+  const response =
+    await fetch(
+      url.toString(),
+      {
+        method: "GET",
+        headers:
+          createAuthorizationHeader(
+            accessToken,
+          ),
+        cache: "no-store",
+      },
+    );
 
   await handleDriveResponse(
     response,
@@ -143,13 +242,14 @@ export async function findVaultFile(
   const data =
     (await response.json()) as DriveFileListResponse;
 
-  const file = data.files?.find(
-    (item) =>
-      item.name ===
-        DUMP_VAULT_FILENAME &&
-      item.mimeType ===
-        DUMP_VAULT_MIME_TYPE,
-  );
+  const file =
+    data.files?.find(
+      (item) =>
+        item.name ===
+          DUMP_VAULT_FILENAME &&
+        item.mimeType ===
+          DUMP_VAULT_MIME_TYPE,
+    );
 
   if (!file) {
     return null;
@@ -171,7 +271,8 @@ export async function createVaultFile(
 
   const metadata =
     JSON.stringify({
-      name: DUMP_VAULT_FILENAME,
+      name:
+        DUMP_VAULT_FILENAME,
       mimeType:
         DUMP_VAULT_MIME_TYPE,
     });
@@ -196,24 +297,25 @@ export async function createVaultFile(
       body,
     );
 
-  const response = await fetch(
-    `${DRIVE_UPLOAD_BASE}/files?uploadType=multipart`,
-    {
-      method: "POST",
-      headers: {
-        ...createAuthorizationHeader(
-          accessToken,
-        ),
-        "Content-Type":
-          `multipart/related; boundary=${boundary}`,
-        "Content-Length":
-          String(
-            bodyBytes.byteLength,
+  const response =
+    await fetch(
+      `${DRIVE_UPLOAD_BASE}/files?uploadType=multipart`,
+      {
+        method: "POST",
+        headers: {
+          ...createAuthorizationHeader(
+            accessToken,
           ),
+          "Content-Type":
+            `multipart/related; boundary=${boundary}`,
+          "Content-Length":
+            String(
+              bodyBytes.byteLength,
+            ),
+        },
+        body: bodyBytes,
       },
-      body: bodyBytes,
-    },
-  );
+    );
 
   await handleDriveResponse(
     response,
@@ -234,6 +336,10 @@ export async function downloadVaultFile(
   accessToken: string,
   fileId: string,
 ): Promise<string> {
+  validateDriveFileId(
+    fileId,
+  );
+
   const url = new URL(
     `${DRIVE_API_BASE}/files/${encodeURIComponent(
       fileId,
@@ -245,17 +351,18 @@ export async function downloadVaultFile(
     "media",
   );
 
-  const response = await fetch(
-    url.toString(),
-    {
-      method: "GET",
-      headers:
-        createAuthorizationHeader(
-          accessToken,
-        ),
-      cache: "no-store",
-    },
-  );
+  const response =
+    await fetch(
+      url.toString(),
+      {
+        method: "GET",
+        headers:
+          createAuthorizationHeader(
+            accessToken,
+          ),
+        cache: "no-store",
+      },
+    );
 
   await handleDriveResponse(
     response,
@@ -270,6 +377,10 @@ export async function updateVaultFile(
   fileId: string,
   encryptedVault: string,
 ): Promise<DriveVaultFile> {
+  validateDriveFileId(
+    fileId,
+  );
+
   const url = new URL(
     `${DRIVE_UPLOAD_BASE}/files/${encodeURIComponent(
       fileId,
@@ -286,24 +397,25 @@ export async function updateVaultFile(
       encryptedVault,
     );
 
-  const response = await fetch(
-    url.toString(),
-    {
-      method: "PATCH",
-      headers: {
-        ...createAuthorizationHeader(
-          accessToken,
-        ),
-        "Content-Type":
-          DUMP_VAULT_MIME_TYPE,
-        "Content-Length":
-          String(
-            bodyBytes.byteLength,
+  const response =
+    await fetch(
+      url.toString(),
+      {
+        method: "PATCH",
+        headers: {
+          ...createAuthorizationHeader(
+            accessToken,
           ),
+          "Content-Type":
+            DUMP_VAULT_MIME_TYPE,
+          "Content-Length":
+            String(
+              bodyBytes.byteLength,
+            ),
+        },
+        body: bodyBytes,
       },
-      body: bodyBytes,
-    },
-  );
+    );
 
   await handleDriveResponse(
     response,
@@ -325,6 +437,18 @@ export async function createAttachmentFile(
   encryptedContent: Blob,
   attachmentId: string,
 ): Promise<DriveAttachmentFile> {
+  validateAttachmentId(
+    attachmentId,
+  );
+
+  if (
+    !(encryptedContent instanceof Blob)
+  ) {
+    throw new Error(
+      "Invalid encrypted attachment.",
+    );
+  }
+
   if (
     encryptedContent.size <=
     0
@@ -334,17 +458,27 @@ export async function createAttachmentFile(
     );
   }
 
+  if (
+    encryptedContent.size >
+    MAX_ATTACHMENT_SIZE
+  ) {
+    throw new Error(
+      "Encrypted attachment is too large.",
+    );
+  }
+
   const boundary =
     `dump-${crypto.randomUUID()}`;
 
   const metadata =
     JSON.stringify({
-      name: `${DUMP_ATTACHMENT_PREFIX} ${attachmentId}.bin`,
+      name:
+        `${DUMP_ATTACHMENT_PREFIX} ${attachmentId}.bin`,
       mimeType:
         "application/octet-stream",
       appProperties: {
         dumpType:
-          "attachment",
+          DUMP_ATTACHMENT_TYPE,
         dumpAttachmentId:
           attachmentId,
       },
@@ -352,16 +486,6 @@ export async function createAttachmentFile(
 
   const encoder =
     new TextEncoder();
-
-  /*
-   * Part 1:
-   *
-   * --boundary
-   * Content-Type: application/json; charset=UTF-8
-   *
-   * {metadata}
-   *
-   */
 
   const metadataPart =
     [
@@ -372,15 +496,6 @@ export async function createAttachmentFile(
       "",
     ].join("\r\n");
 
-  /*
-   * Part 2:
-   *
-   * --boundary
-   * Content-Type: application/octet-stream
-   *
-   * {encrypted bytes}
-   */
-
   const mediaPartHeader =
     [
       `--${boundary}`,
@@ -388,11 +503,6 @@ export async function createAttachmentFile(
       "",
       "",
     ].join("\r\n");
-
-  /*
-   * Final boundary must be preceded
-   * by CRLF after the binary media.
-   */
 
   const closingBoundary =
     [
@@ -463,24 +573,25 @@ export async function createAttachmentFile(
     offset,
   );
 
-  const response = await fetch(
-    `${DRIVE_UPLOAD_BASE}/files?uploadType=multipart`,
-    {
-      method: "POST",
-      headers: {
-        ...createAuthorizationHeader(
-          accessToken,
-        ),
-        "Content-Type":
-          `multipart/related; boundary=${boundary}`,
-        "Content-Length":
-          String(
-            body.byteLength,
+  const response =
+    await fetch(
+      `${DRIVE_UPLOAD_BASE}/files?uploadType=multipart`,
+      {
+        method: "POST",
+        headers: {
+          ...createAuthorizationHeader(
+            accessToken,
           ),
+          "Content-Type":
+            `multipart/related; boundary=${boundary}`,
+          "Content-Length":
+            String(
+              body.byteLength,
+            ),
+        },
+        body,
       },
-      body,
-    },
-  );
+    );
 
   await handleDriveResponse(
     response,
@@ -490,9 +601,19 @@ export async function createAttachmentFile(
   const file =
     (await response.json()) as DriveFile;
 
+  if (
+    !file.id
+  ) {
+    throw new Error(
+      "Google Drive returned an invalid attachment.",
+    );
+  }
+
   return {
     id: file.id,
-    name: file.name,
+    name:
+      file.name ||
+      `${DUMP_ATTACHMENT_PREFIX} ${attachmentId}.bin`,
     mimeType:
       file.mimeType ||
       "application/octet-stream",
@@ -502,14 +623,14 @@ export async function createAttachmentFile(
   };
 }
 
-export async function downloadAttachmentFile(
+async function getAttachmentMetadata(
   accessToken: string,
   fileId: string,
-): Promise<{
-  content: ArrayBuffer;
-  mimeType: string;
-  name: string;
-}> {
+): Promise<DriveFile> {
+  validateDriveFileId(
+    fileId,
+  );
+
   const metadataUrl =
     new URL(
       `${DRIVE_API_BASE}/files/${encodeURIComponent(
@@ -543,14 +664,47 @@ export async function downloadAttachmentFile(
   const file =
     (await metadataResponse.json()) as DriveFile;
 
+  validateDumpAttachment(
+    file,
+  );
+
   if (
-    file.appProperties?.dumpType !==
-    "attachment"
+    file.size !==
+      undefined
   ) {
-    throw new Error(
-      "The requested Drive file is not a DUMP attachment.",
-    );
+    const size =
+      Number(file.size);
+
+    if (
+      !Number.isFinite(
+        size,
+      ) ||
+      size < 0 ||
+      size >
+        MAX_ATTACHMENT_SIZE
+    ) {
+      throw new Error(
+        "The requested DUMP attachment has an invalid size.",
+      );
+    }
   }
+
+  return file;
+}
+
+export async function downloadAttachmentFile(
+  accessToken: string,
+  fileId: string,
+): Promise<{
+  content: ArrayBuffer;
+  mimeType: string;
+  name: string;
+}> {
+  const file =
+    await getAttachmentMetadata(
+      accessToken,
+      fileId,
+    );
 
   const contentUrl =
     new URL(
@@ -582,9 +736,29 @@ export async function downloadAttachmentFile(
     "attachment download",
   );
 
+  const content =
+    await contentResponse.arrayBuffer();
+
+  if (
+    content.byteLength <=
+    0
+  ) {
+    throw new Error(
+      "The requested attachment is empty.",
+    );
+  }
+
+  if (
+    content.byteLength >
+    MAX_ATTACHMENT_SIZE
+  ) {
+    throw new Error(
+      "The requested attachment exceeds the maximum allowed size.",
+    );
+  }
+
   return {
-    content:
-      await contentResponse.arrayBuffer(),
+    content,
     mimeType:
       file.mimeType ||
       "application/octet-stream",
@@ -598,47 +772,10 @@ export async function deleteAttachmentFile(
   accessToken: string,
   fileId: string,
 ): Promise<void> {
-  const metadataUrl =
-    new URL(
-      `${DRIVE_API_BASE}/files/${encodeURIComponent(
-        fileId,
-      )}`,
-    );
-
-  metadataUrl.searchParams.set(
-    "fields",
-    "id,appProperties",
+  await getAttachmentMetadata(
+    accessToken,
+    fileId,
   );
-
-  const metadataResponse =
-    await fetch(
-      metadataUrl.toString(),
-      {
-        method: "GET",
-        headers:
-          createAuthorizationHeader(
-            accessToken,
-          ),
-        cache: "no-store",
-      },
-    );
-
-  await handleDriveResponse(
-    metadataResponse,
-    "attachment metadata lookup",
-  );
-
-  const file =
-    (await metadataResponse.json()) as DriveFile;
-
-  if (
-    file.appProperties?.dumpType !==
-    "attachment"
-  ) {
-    throw new Error(
-      "The requested Drive file is not a DUMP attachment.",
-    );
-  }
 
   const response =
     await fetch(

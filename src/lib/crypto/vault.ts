@@ -6,8 +6,15 @@ const SALT_LENGTH = 16;
 
 const IV_LENGTH = 12;
 
+const MAX_VAULT_PLAINTEXT_LENGTH =
+  40 * 1024 * 1024;
+
 const MAX_CIPHERTEXT_LENGTH =
-  50 * 1024 * 1024;
+  MAX_VAULT_PLAINTEXT_LENGTH +
+  16;
+
+const BASE64_PATTERN =
+  /^[A-Za-z0-9+/]*={0,2}$/;
 
 export type EncryptedVault = {
   version: 1;
@@ -21,12 +28,30 @@ function bytesToBase64(
 ): string {
   let binary = "";
 
+  /*
+   * Avoid spreading a potentially large
+   * Uint8Array into String.fromCharCode().
+   */
+  const CHUNK_SIZE = 0x8000;
+
   for (
-    const byte of bytes
+    let offset = 0;
+    offset < bytes.length;
+    offset += CHUNK_SIZE
   ) {
-    binary += String.fromCharCode(
-      byte,
-    );
+    const chunk =
+      bytes.subarray(
+        offset,
+        Math.min(
+          offset + CHUNK_SIZE,
+          bytes.length,
+        ),
+      );
+
+    binary +=
+      String.fromCharCode(
+        ...chunk,
+      );
   }
 
   return btoa(binary);
@@ -41,6 +66,37 @@ function base64ToBytes(
   ) {
     throw new Error(
       "Invalid encrypted vault data.",
+    );
+  }
+
+  /*
+   * Reject malformed Base64 before
+   * passing it to atob().
+   */
+  if (
+    value.length % 4 !== 0 ||
+    !BASE64_PATTERN.test(value)
+  ) {
+    throw new Error(
+      "Invalid encrypted vault encoding.",
+    );
+  }
+
+  /*
+   * Padding may only occur at the end.
+   */
+  const paddingIndex =
+    value.indexOf("=");
+
+  if (
+    paddingIndex !== -1 &&
+    paddingIndex <
+      value.length - 2 &&
+    value[paddingIndex + 1] !==
+      "="
+  ) {
+    throw new Error(
+      "Invalid encrypted vault encoding.",
     );
   }
 
@@ -106,7 +162,8 @@ function validateIv(
   iv: Uint8Array,
 ): void {
   if (
-    iv.length !== IV_LENGTH
+    iv.length !==
+    IV_LENGTH
   ) {
     throw new Error(
       "Invalid vault initialization vector.",
@@ -116,10 +173,15 @@ function validateIv(
 
 function validateEncryptedVault(
   encryptedVault: EncryptedVault,
-): void {
+): {
+  salt: Uint8Array;
+  iv: Uint8Array;
+  ciphertext: Uint8Array;
+} {
   if (
     !encryptedVault ||
-    encryptedVault.version !== 1
+    encryptedVault.version !==
+      1
   ) {
     throw new Error(
       "Unsupported vault encryption version.",
@@ -128,11 +190,11 @@ function validateEncryptedVault(
 
   if (
     typeof encryptedVault.salt !==
-    "string" ||
+      "string" ||
     typeof encryptedVault.iv !==
-    "string" ||
+      "string" ||
     typeof encryptedVault.ciphertext !==
-    "string"
+      "string"
   ) {
     throw new Error(
       "Invalid encrypted vault format.",
@@ -174,6 +236,33 @@ function validateEncryptedVault(
       "Encrypted vault is too large.",
     );
   }
+
+  return {
+    salt,
+    iv,
+    ciphertext,
+  };
+}
+
+function validatePlaintextLength(
+  plaintext: Uint8Array,
+): void {
+  if (
+    plaintext.length === 0
+  ) {
+    throw new Error(
+      "Vault plaintext is empty.",
+    );
+  }
+
+  if (
+    plaintext.length >
+    MAX_VAULT_PLAINTEXT_LENGTH
+  ) {
+    throw new Error(
+      "Vault plaintext is too large.",
+    );
+  }
 }
 
 export async function deriveVaultKey(
@@ -182,7 +271,7 @@ export async function deriveVaultKey(
 ): Promise<CryptoKey> {
   if (
     typeof password !==
-    "string" ||
+      "string" ||
     password.length === 0
   ) {
     throw new Error(
@@ -249,16 +338,28 @@ export async function encryptVaultWithKey(
 ): Promise<EncryptedVault> {
   validateSalt(salt);
 
+  if (
+    !(key instanceof CryptoKey)
+  ) {
+    throw new Error(
+      "Invalid vault encryption key.",
+    );
+  }
+
+  const plaintext =
+    new TextEncoder().encode(
+      JSON.stringify(vault),
+    );
+
+  validatePlaintextLength(
+    plaintext,
+  );
+
   const iv =
     crypto.getRandomValues(
       new Uint8Array(
         IV_LENGTH,
       ),
-    );
-
-  const plaintext =
-    new TextEncoder().encode(
-      JSON.stringify(vault),
     );
 
   const encrypted =
@@ -308,18 +409,20 @@ export async function decryptVaultWithKey<T>(
   key: CryptoKey,
   encryptedVault: EncryptedVault,
 ): Promise<T> {
-  validateEncryptedVault(
-    encryptedVault,
-  );
-
-  const iv =
-    base64ToBytes(
-      encryptedVault.iv,
+  if (
+    !(key instanceof CryptoKey)
+  ) {
+    throw new Error(
+      "Invalid vault decryption key.",
     );
+  }
 
-  const ciphertext =
-    base64ToBytes(
-      encryptedVault.ciphertext,
+  const {
+    iv,
+    ciphertext,
+  } =
+    validateEncryptedVault(
+      encryptedVault,
     );
 
   try {
@@ -338,18 +441,40 @@ export async function decryptVaultWithKey<T>(
       );
 
     const plaintext =
-      new TextDecoder().decode(
+      new Uint8Array(
         decrypted,
       );
 
-    return JSON.parse(
+    validatePlaintextLength(
       plaintext,
+    );
+
+    const decoded =
+      new TextDecoder(
+        "utf-8",
+        {
+          fatal: true,
+        },
+      ).decode(
+        plaintext,
+      );
+
+    return JSON.parse(
+      decoded,
     ) as T;
   } catch {
     /*
-     * Don't reveal whether failure came from
-     * authentication/tag validation or malformed
-     * plaintext.
+     * Do not reveal whether the failure
+     * came from:
+     *
+     * - incorrect password
+     * - AES-GCM authentication failure
+     * - corrupted ciphertext
+     * - invalid UTF-8
+     * - invalid JSON
+     *
+     * All are treated as the same
+     * decryption failure.
      */
     throw new Error(
       "Unable to decrypt the vault. The password or vault data may be invalid.",
@@ -361,7 +486,11 @@ export async function encryptVault(
   password: string,
   vault: unknown,
 ): Promise<EncryptedVault> {
-  if (!password) {
+  if (
+    typeof password !==
+      "string" ||
+    password.length === 0
+  ) {
     throw new Error(
       "Vault password is required.",
     );
@@ -387,18 +516,27 @@ export async function decryptVault<T>(
   password: string,
   encryptedVault: EncryptedVault,
 ): Promise<T> {
-  if (!password) {
+  if (
+    typeof password !==
+      "string" ||
+    password.length === 0
+  ) {
     throw new Error(
       "Vault password is required.",
     );
   }
 
-  const salt =
-    base64ToBytes(
-      encryptedVault.salt,
+  /*
+   * validateEncryptedVault() performs
+   * the complete structural validation,
+   * including salt length.
+   */
+  const {
+    salt,
+  } =
+    validateEncryptedVault(
+      encryptedVault,
     );
-
-  validateSalt(salt);
 
   const key =
     await deriveVaultKey(

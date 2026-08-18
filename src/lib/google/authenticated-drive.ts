@@ -34,7 +34,8 @@ async function getAccessToken(): Promise<string> {
   return accessToken;
 }
 
-export async function findUserVaultFile(): Promise<DriveVaultFile | null> {
+export async function findUserVaultFile():
+  Promise<DriveVaultFile | null> {
   const accessToken =
     await getAccessToken();
 
@@ -97,7 +98,11 @@ export async function createUserAttachmentFile(
 
 export async function downloadUserAttachmentFile(
   fileId: string,
-) {
+): Promise<{
+  content: ArrayBuffer;
+  mimeType: string;
+  name: string;
+}> {
   const accessToken =
     await getAccessToken();
 
@@ -113,7 +118,7 @@ export async function deleteUserAttachmentFile(
   const accessToken =
     await getAccessToken();
 
-  return deleteAttachmentFile(
+  await deleteAttachmentFile(
     accessToken,
     fileId,
   );

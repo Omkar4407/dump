@@ -19,9 +19,41 @@ function isValidFileId(
   return (
     value.length > 0 &&
     value.length <= 500 &&
-    !value.includes("/") &&
-    !value.includes("\\")
+    /^[A-Za-z0-9_-]+$/.test(
+      value,
+    )
   );
+}
+
+function createAttachmentContentDisposition(
+  fileName: string,
+): string {
+  const safeFileName =
+    fileName
+      .replace(
+        /[\r\n"]/g,
+        "",
+      )
+      .trim();
+
+  const fallbackName =
+    safeFileName ||
+    "DUMP Attachment.bin";
+
+  return `attachment; filename*=UTF-8''${encodeURIComponent(
+    fallbackName,
+  )}`;
+}
+
+async function requireAuthenticatedUser() {
+  const session =
+    await auth();
+
+  if (!session?.user) {
+    return null;
+  }
+
+  return session;
 }
 
 export async function GET(
@@ -29,9 +61,9 @@ export async function GET(
   context: RouteContext,
 ) {
   const session =
-    await auth();
+    await requireAuthenticatedUser();
 
-  if (!session?.user) {
+  if (!session) {
     return NextResponse.json(
       {
         error:
@@ -76,12 +108,15 @@ export async function GET(
             "application/octet-stream",
 
           "Content-Disposition":
-            `attachment; filename="${encodeURIComponent(
+            createAttachmentContentDisposition(
               attachment.name,
-            )}"`,
+            ),
 
           "Cache-Control":
             "private, no-store",
+
+          "X-Content-Type-Options":
+            "nosniff",
         },
       },
     );
@@ -110,9 +145,9 @@ export async function DELETE(
   context: RouteContext,
 ) {
   const session =
-    await auth();
+    await requireAuthenticatedUser();
 
-  if (!session?.user) {
+  if (!session) {
     return NextResponse.json(
       {
         error:
@@ -147,9 +182,18 @@ export async function DELETE(
       fileId,
     );
 
-    return NextResponse.json({
-      success: true,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      },
+    );
   } catch (error) {
     console.error(
       "DUMP attachment DELETE error:",

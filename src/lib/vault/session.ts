@@ -23,8 +23,9 @@ import {
   } from "@/lib/security/password";
   
   type VaultSession = {
-    key: CryptoKey;
-    salt: Uint8Array;
+    readonly id: string;
+    readonly key: CryptoKey;
+    readonly salt: Uint8Array;
   };
   
   let activeSession:
@@ -34,33 +35,63 @@ import {
   function decodeSalt(
     encodedSalt: string,
   ): Uint8Array {
+    if (
+      typeof encodedSalt !==
+        "string" ||
+      encodedSalt.length === 0
+    ) {
+      throw new Error(
+        "Vault encryption metadata is invalid.",
+      );
+    }
+  
+    let binary: string;
+  
     try {
-      const binary =
+      binary =
         atob(encodedSalt);
-  
-      const bytes =
-        new Uint8Array(
-          binary.length,
-        );
-  
-      for (
-        let index = 0;
-        index <
-        binary.length;
-        index++
-      ) {
-        bytes[index] =
-          binary.charCodeAt(
-            index,
-          );
-      }
-  
-      return bytes;
     } catch {
       throw new Error(
         "Vault encryption metadata is invalid.",
       );
     }
+  
+    const bytes =
+      new Uint8Array(
+        binary.length,
+      );
+  
+    for (
+      let index = 0;
+      index <
+      binary.length;
+      index++
+    ) {
+      bytes[index] =
+        binary.charCodeAt(
+          index,
+        );
+    }
+  
+    return bytes;
+  }
+  
+  
+  function createSessionId(): string {
+    return crypto.randomUUID();
+  }
+  
+  function createSession(
+    key: CryptoKey,
+    salt: Uint8Array,
+  ): VaultSession {
+    return {
+      id: createSessionId(),
+      key,
+      salt: new Uint8Array(
+        salt,
+      ),
+    };
   }
   
   export async function createVaultSession(
@@ -70,6 +101,10 @@ import {
       password,
     );
   
+    /*
+     * Always invalidate any previous
+     * session before creating a new one.
+     */
     clearVaultSession();
   
     try {
@@ -82,14 +117,16 @@ import {
           salt,
         );
   
-      activeSession = {
-        key,
-        salt: new Uint8Array(
+      const session =
+        createSession(
+          key,
           salt,
-        ),
-      };
+        );
   
-      return activeSession;
+      activeSession =
+        session;
+  
+      return session;
     } catch (error) {
       clearVaultSession();
       throw error;
@@ -104,6 +141,10 @@ import {
       password,
     );
   
+    /*
+     * Never allow an old session to
+     * survive a new unlock attempt.
+     */
     clearVaultSession();
   
     try {
@@ -127,8 +168,7 @@ import {
           salt,
         );
   
-      let decrypted:
-        unknown;
+      let decrypted: unknown;
   
       try {
         decrypted =
@@ -147,12 +187,17 @@ import {
           decrypted,
         );
   
-      activeSession = {
-        key,
-        salt: new Uint8Array(
+      /*
+       * Only create the active session
+       * after BOTH cryptographic
+       * verification and vault schema
+       * validation succeed.
+       */
+      activeSession =
+        createSession(
+          key,
           salt,
-        ),
-      };
+        );
   
       return vault;
     } catch (error) {
@@ -164,20 +209,25 @@ import {
   export async function encryptVaultSession(
     vault: Vault,
   ): Promise<EncryptedVault> {
-    if (!activeSession) {
-      throw new Error(
-        "No active vault session.",
-      );
-    }
+    const session =
+      requireVaultSession();
   
     const validatedVault =
       validateAndMigrateVault(
         vault,
       );
   
+    /*
+     * encryptVaultWithKey() will use the
+     * session's salt. Keeping this value
+     * attached to the session guarantees
+     * that all subsequent vault writes
+     * use the same salt that derived the
+     * active key.
+     */
     return encryptVaultWithKey(
-      activeSession.key,
-      activeSession.salt,
+      session.key,
+      session.salt,
       validatedVault,
     );
   }
@@ -206,10 +256,16 @@ import {
   export function clearVaultSession():
     void {
     /*
-     * JavaScript cannot explicitly destroy a
-     * non-exportable CryptoKey. Removing the
-     * application's reference is the correct
-     * lifecycle operation.
+     * CryptoKey is non-exportable, so
+     * JavaScript cannot explicitly zeroize
+     * it. Removing the application's
+     * reference makes it eligible for
+     * garbage collection.
+     *
+     * Replacing the entire session object
+     * also invalidates its session ID and
+     * prevents later code from treating
+     * the old session as active.
      */
     activeSession = null;
   }

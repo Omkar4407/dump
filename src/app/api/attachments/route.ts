@@ -10,36 +10,33 @@ const MAX_ENCRYPTED_ATTACHMENT_SIZE =
   100 * 1024 * 1024 +
   16;
 
+const MIN_ATTACHMENT_ID_LENGTH =
+  10;
+
+const MAX_ATTACHMENT_ID_LENGTH =
+  100;
+
 function isValidAttachmentId(
   value: string,
 ): boolean {
   return (
-    value.length >= 10 &&
-    value.length <= 100 &&
+    value.length >=
+      MIN_ATTACHMENT_ID_LENGTH &&
+    value.length <=
+      MAX_ATTACHMENT_ID_LENGTH &&
     /^[a-zA-Z0-9_-]+$/.test(
       value,
     )
   );
 }
 
-async function requireAuth() {
-  const session =
-    await auth();
-
-  if (!session?.user) {
-    return null;
-  }
-
-  return session;
-}
-
 export async function POST(
   request: Request,
 ) {
   const session =
-    await requireAuth();
+    await auth();
 
-  if (!session) {
+  if (!session?.user) {
     return NextResponse.json(
       {
         error:
@@ -79,12 +76,19 @@ export async function POST(
         "content-length",
       );
 
-    if (contentLength) {
+    if (
+      contentLength !==
+      null
+    ) {
       const size =
-        Number(contentLength);
+        Number(
+          contentLength,
+        );
 
       if (
-        !Number.isFinite(size) ||
+        !Number.isSafeInteger(
+          size,
+        ) ||
         size <= 0
       ) {
         return NextResponse.json(
@@ -165,11 +169,20 @@ export async function POST(
         attachmentId,
       );
 
-    return NextResponse.json({
-      success: true,
-      fileId: file.id,
-      size: file.size,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        fileId: file.id,
+        size: file.size,
+      },
+      {
+        status: 201,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      },
+    );
   } catch (error) {
     console.error(
       "DUMP attachment POST error:",
