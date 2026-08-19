@@ -1,6 +1,5 @@
 import type {
     Memory,
-    MemoryAttachment,
     MemoryMetadata,
     MemoryType,
     Vault,
@@ -13,13 +12,22 @@ import type {
     updateMemory,
   } from "@/lib/vault/vault";
   
+  import {
+    exactSearch,
+    type ExactSearchField,
+  } from "@/lib/memory/search/exact-search";
+  
+  import {
+    fuzzySearch,
+    type FuzzySearchField,
+  } from "@/lib/memory/search/fuzzy-search";
+  
   export type CreateMemoryInput = {
     type: MemoryType;
     data: string;
     description: string;
     tags?: string[];
     metadata?: MemoryMetadata;
-    attachments?: MemoryAttachment[];
   };
   
   export type UpdateMemoryInput = {
@@ -28,7 +36,32 @@ import type {
     description?: string;
     tags?: string[];
     metadata?: MemoryMetadata;
-    attachments?: MemoryAttachment[];
+  };
+  
+  export type MemorySearchFilters = {
+    type?: MemoryType | "All";
+    tag?: string;
+  };
+  
+  export type MemorySearchOptions =
+    MemorySearchFilters & {
+      query?: string;
+    };
+  
+    export type MemorySearchMatch =
+    | "exact"
+    | "description"
+    | "content"
+    | "tag"
+    | "metadata"
+    | "attachment"
+    | "type"
+    | "semantic";
+  
+  export type MemorySearchResult = {
+    memory: Memory;
+    score: number;
+    matches: MemorySearchMatch[];
   };
   
   function normalizeTags(
@@ -79,15 +112,6 @@ import type {
     return normalized;
   }
   
-  function normalizeAttachments(
-    attachments:
-      MemoryAttachment[] = [],
-  ): MemoryAttachment[] {
-    return [
-      ...attachments,
-    ];
-  }
-  
   function validateDescription(
     description: string,
   ): string {
@@ -106,14 +130,8 @@ import type {
   function validateData(
     data: string,
   ): string {
-    return data.trim();
-  }
-  
-  function validateRequiredData(
-    data: string,
-  ): string {
     const value =
-      validateData(data);
+      data.trim();
   
     if (!value) {
       throw new Error(
@@ -210,60 +228,6 @@ import type {
     }
   }
   
-  function validateAttachments(
-    attachments:
-      MemoryAttachment[],
-  ): void {
-    for (
-      const attachment of
-      attachments
-    ) {
-      if (
-        !attachment.id.trim()
-      ) {
-        throw new Error(
-          "Attachment ID is required.",
-        );
-      }
-  
-      if (
-        !attachment.driveFileId.trim()
-      ) {
-        throw new Error(
-          "Attachment Drive file ID is required.",
-        );
-      }
-  
-      if (
-        attachment.encryptionVersion !==
-        1
-      ) {
-        throw new Error(
-          "Unsupported attachment encryption version.",
-        );
-      }
-  
-      if (
-        !attachment.iv.trim()
-      ) {
-        throw new Error(
-          "Attachment encryption metadata is missing.",
-        );
-      }
-    }
-  }
-  
-  function requiresMemoryData(
-    type: MemoryType,
-  ): boolean {
-    return ![
-      "Image",
-      "File",
-      "Audio",
-      "Video",
-    ].includes(type);
-  }
-  
   function validateCreateInput(
     input: CreateMemoryInput,
   ): {
@@ -272,7 +236,6 @@ import type {
     description: string;
     tags: string[];
     metadata: MemoryMetadata;
-    attachments: MemoryAttachment[];
   } {
     const description =
       validateDescription(
@@ -280,13 +243,9 @@ import type {
       );
   
     const data =
-      requiresMemoryData(input.type)
-        ? validateRequiredData(
-            input.data,
-          )
-        : validateData(
-            input.data,
-          );
+      validateData(
+        input.data,
+      );
   
     if (
       input.type ===
@@ -318,29 +277,6 @@ import type {
         "plaintext";
     }
   
-    const attachments =
-      normalizeAttachments(
-        input.attachments,
-      );
-  
-    validateAttachments(
-      attachments,
-    );
-  
-    if (
-      [
-        "Image",
-        "File",
-        "Audio",
-        "Video",
-      ].includes(input.type) &&
-      attachments.length === 0
-    ) {
-      throw new Error(
-        `${input.type} memory requires an attachment.`,
-      );
-    }
-  
     return {
       type: input.type,
       data,
@@ -349,7 +285,6 @@ import type {
         input.tags,
       ),
       metadata,
-      attachments,
     };
   }
   
@@ -372,7 +307,6 @@ import type {
         validated.description,
         validated.tags,
         validated.metadata,
-        validated.attachments,
       );
   
     const updatedVault =
@@ -408,6 +342,506 @@ import type {
     ];
   }
   
+  export function getMemoryTypesFromVault(
+    vault: Vault,
+  ): MemoryType[] {
+    return [
+      ...new Set(
+        vault.memories.map(
+          (memory) =>
+            memory.type,
+        ),
+      ),
+    ];
+  }
+  
+  export function getMemoryTagsFromVault(
+    vault: Vault,
+  ): string[] {
+    return [
+      ...new Set(
+        vault.memories.flatMap(
+          (memory) =>
+            memory.tags ?? [],
+        ),
+      ),
+    ].sort(
+      (a, b) =>
+        a.localeCompare(b),
+    );
+  }
+  
+  function normalizeSearchText(
+    value: string,
+  ): string {
+    return value
+      .normalize("NFKC")
+      .toLowerCase()
+      .replace(
+        /[^\p{L}\p{N}]+/gu,
+        " ",
+      )
+      .replace(
+        /\s+/g,
+        " ",
+      )
+      .trim();
+  }
+  
+  function filterMemories(
+    vault: Vault,
+    options: MemorySearchOptions,
+  ): Memory[] {
+    const normalizedTag =
+      normalizeSearchText(
+        (
+          options.tag ??
+          ""
+        ).replace(
+          /^#/,
+          "",
+        ),
+      );
+  
+    const selectedType =
+      options.type ??
+      "All";
+  
+    return vault.memories.filter(
+      (memory) => {
+        if (
+          selectedType !==
+            "All" &&
+          memory.type !==
+            selectedType
+        ) {
+          return false;
+        }
+  
+        if (
+          normalizedTag
+        ) {
+          const tags = (
+            memory.tags ?? []
+          ).map((tag) =>
+            normalizeSearchText(
+              tag.replace(
+                /^#/,
+                "",
+              ),
+            ),
+          );
+  
+          if (
+            !tags.includes(
+              normalizedTag,
+            )
+          ) {
+            return false;
+          }
+        }
+  
+        return true;
+      },
+    );
+  }
+  
+  function mapExactMatchField(
+    field: ExactSearchField,
+  ): MemorySearchMatch {
+    switch (field) {
+      case "description":
+        return "description";
+  
+      case "content":
+        return "content";
+  
+      case "tag":
+        return "tag";
+  
+      case "metadata-key":
+      case "metadata-value":
+        return "metadata";
+  
+      case "attachment-name":
+      case "attachment-type":
+        return "attachment";
+  
+      case "type":
+        return "type";
+  
+      default:
+        return "content";
+    }
+  }
+  
+  function mapFuzzyMatchField(
+    field: FuzzySearchField,
+  ): MemorySearchMatch {
+    switch (field) {
+      case "description":
+        return "description";
+  
+      case "content":
+        return "content";
+  
+      case "tag":
+        return "tag";
+  
+      case "metadata-key":
+      case "metadata-value":
+        return "metadata";
+  
+      case "attachment-name":
+      case "attachment-type":
+        return "attachment";
+  
+      case "type":
+        return "type";
+  
+      default:
+        return "content";
+    }
+  }
+  
+  function addPublicMatch(
+    target: Set<MemorySearchMatch>,
+    match: MemorySearchMatch,
+  ): void {
+    target.add(match);
+  }
+  
+  function getPublicSearchMatches(
+    exactFields: ExactSearchField[],
+    fuzzyFields: FuzzySearchField[],
+    hasExactMatch: boolean,
+  ): MemorySearchMatch[] {
+    const matches =
+      new Set<MemorySearchMatch>();
+  
+    /*
+     * "exact" is reserved for an
+     * actual exact lexical retrieval.
+     *
+     * A fuzzy-only result must never
+     * be presented to the UI as exact.
+     */
+    if (hasExactMatch) {
+      addPublicMatch(
+        matches,
+        "exact",
+      );
+    }
+  
+    for (const field of exactFields) {
+      addPublicMatch(
+        matches,
+        mapExactMatchField(
+          field,
+        ),
+      );
+    }
+  
+    for (const field of fuzzyFields) {
+      addPublicMatch(
+        matches,
+        mapFuzzyMatchField(
+          field,
+        ),
+      );
+    }
+  
+    return [
+      ...matches,
+    ];
+  }
+  
+  /*
+   * Exact results receive a large
+   * ranking band so that exact lexical
+   * retrieval always outranks a fuzzy-only
+   * result.
+   *
+   * Fuzzy similarity is retained as a
+   * secondary signal for memories that
+   * are found by both engines.
+   */
+  const EXACT_RESULT_BONUS =
+    10_000;
+  
+  const FUZZY_SECONDARY_FACTOR =
+    0.01;
+  
+  type CombinedSearchResult = {
+    memory: Memory;
+    score: number;
+    matches: MemorySearchMatch[];
+    exact: boolean;
+    originalIndex: number;
+  };
+  
+  export function searchMemoryResultsInVault(
+    vault: Vault,
+    options: MemorySearchOptions = {},
+  ): MemorySearchResult[] {
+    const normalizedQuery =
+      normalizeSearchText(
+        options.query ??
+          "",
+      );
+  
+    const filteredMemories =
+      filterMemories(
+        vault,
+        options,
+      );
+  
+    /*
+     * No query means there is no
+     * retrieval/ranking operation.
+     *
+     * Return every memory surviving
+     * structural filters.
+     */
+    if (!normalizedQuery) {
+      return filteredMemories.map(
+        (memory) => ({
+          memory,
+          score: 0,
+          matches: [],
+        }),
+      );
+    }
+  
+    /*
+     * Run both lexical retrieval
+     * engines independently.
+     */
+    const exactResults =
+      exactSearch(
+        filteredMemories,
+        normalizedQuery,
+      );
+  
+    const fuzzyResults =
+      fuzzySearch(
+        filteredMemories,
+        normalizedQuery,
+      );
+  
+    /*
+     * Build lookup maps so a memory
+     * returned by both engines appears
+     * exactly once.
+     */
+    const exactById =
+      new Map(
+        exactResults.map(
+          (result) => [
+            result.memory.id,
+            result,
+          ],
+        ),
+      );
+  
+    const fuzzyById =
+      new Map(
+        fuzzyResults.map(
+          (result) => [
+            result.memory.id,
+            result,
+          ],
+        ),
+      );
+  
+    const combined =
+      new Map<
+        string,
+        CombinedSearchResult
+      >();
+  
+    /*
+     * Exact results establish the
+     * primary ranking band.
+     */
+    for (
+      const [
+        index,
+        result,
+      ] of exactResults.entries()
+    ) {
+      const fuzzy =
+        fuzzyById.get(
+          result.memory.id,
+        );
+  
+      const fuzzySecondaryScore =
+        fuzzy
+          ? fuzzy.score *
+            FUZZY_SECONDARY_FACTOR
+          : 0;
+  
+      combined.set(
+        result.memory.id,
+        {
+          memory:
+            result.memory,
+  
+          score:
+            EXACT_RESULT_BONUS +
+            result.score +
+            fuzzySecondaryScore,
+  
+          matches:
+            getPublicSearchMatches(
+              result.matches.map(
+                (match) =>
+                  match.field,
+              ),
+              fuzzy
+                ? fuzzy.matches.map(
+                    (match) =>
+                      match.field,
+                  )
+                : [],
+              true,
+            ),
+  
+          exact: true,
+  
+          originalIndex:
+            index,
+        },
+      );
+    }
+  
+    /*
+     * Add fuzzy-only results after the
+     * exact result band.
+     */
+    for (
+      const [
+        index,
+        result,
+      ] of fuzzyResults.entries()
+    ) {
+      if (
+        exactById.has(
+          result.memory.id,
+        )
+      ) {
+        continue;
+      }
+  
+      combined.set(
+        result.memory.id,
+        {
+          memory:
+            result.memory,
+  
+          score:
+            result.score,
+  
+          matches:
+            getPublicSearchMatches(
+              [],
+              result.matches.map(
+                (match) =>
+                  match.field,
+              ),
+              false,
+            ),
+  
+          exact: false,
+  
+          originalIndex:
+            index,
+        },
+      );
+    }
+  
+    const results =
+      [
+        ...combined.values(),
+      ];
+  
+    /*
+     * Ranking rules:
+     *
+     * 1. Exact results always come
+     *    before fuzzy-only results.
+     *
+     * 2. Within each group, higher
+     *    retrieval score wins.
+     *
+     * 3. Original retrieval order is
+     *    the deterministic tie-breaker.
+     */
+    results.sort(
+      (first, second) => {
+        if (
+          first.exact !==
+          second.exact
+        ) {
+          return first.exact
+            ? -1
+            : 1;
+        }
+  
+        if (
+          first.score !==
+          second.score
+        ) {
+          return (
+            second.score -
+            first.score
+          );
+        }
+  
+        return (
+          first.originalIndex -
+          second.originalIndex
+        );
+      },
+    );
+  
+    return results.map(
+      ({
+        memory,
+        score,
+        matches,
+      }) => ({
+        memory,
+        score,
+        matches,
+      }),
+    );
+  }
+  
+  export function searchMemoriesInVault(
+    vault: Vault,
+    queryOrOptions:
+      | string
+      | MemorySearchOptions,
+  ): Memory[] {
+    const options: MemorySearchOptions =
+      typeof queryOrOptions ===
+      "string"
+        ? {
+            query:
+              queryOrOptions,
+          }
+        : queryOrOptions;
+  
+    return searchMemoryResultsInVault(
+      vault,
+      options,
+    ).map(
+      (result) =>
+        result.memory,
+    );
+  }
+  
   export function updateMemoryInVault(
     vault: Vault,
     memoryId: string,
@@ -435,15 +869,9 @@ import type {
     const nextData =
       updates.data !==
       undefined
-        ? requiresMemoryData(
-            nextType,
+        ? validateData(
+            updates.data,
           )
-          ? validateRequiredData(
-              updates.data,
-            )
-          : validateData(
-              updates.data,
-            )
         : existing.data;
   
     const nextDescription =
@@ -470,15 +898,6 @@ import type {
           )
         : existing.metadata;
   
-    const nextAttachments =
-      updates.attachments !==
-      undefined
-        ? normalizeAttachments(
-            updates.attachments,
-          )
-        : existing.attachments ??
-          [];
-  
     if (
       nextType ===
       "Link"
@@ -494,24 +913,6 @@ import type {
     ) {
       validateCredential(
         nextData,
-      );
-    }
-  
-    validateAttachments(
-      nextAttachments,
-    );
-  
-    if (
-      [
-        "Image",
-        "File",
-        "Audio",
-        "Video",
-      ].includes(nextType) &&
-      nextAttachments.length === 0
-    ) {
-      throw new Error(
-        `${nextType} memory requires an attachment.`,
       );
     }
   
@@ -540,8 +941,6 @@ import type {
           tags: nextTags,
           metadata:
             finalMetadata,
-          attachments:
-            nextAttachments,
         },
       );
   
@@ -592,59 +991,4 @@ import type {
       vault: updatedVault,
       deletedMemory: memory,
     };
-  }
-  
-  export function searchMemoriesInVault(
-    vault: Vault,
-    query: string,
-  ): Memory[] {
-    const normalizedQuery =
-      query
-        .trim()
-        .toLowerCase();
-  
-    if (!normalizedQuery) {
-      return getAllMemoriesFromVault(
-        vault,
-      );
-    }
-  
-    return vault.memories.filter(
-      (memory) => {
-        const attachmentText =
-          (
-            memory.attachments ??
-            []
-          )
-            .map(
-              (attachment) =>
-                [
-                  attachment.fileName,
-                  attachment.mimeType,
-                  attachment.type,
-                ].join(" "),
-            )
-            .join(" ");
-  
-        const searchableText =
-          [
-            memory.description,
-            memory.data,
-            memory.type,
-            ...(memory.tags ??
-              []),
-            ...Object.entries(
-              memory.metadata ??
-                {},
-            ).flat(),
-            attachmentText,
-          ]
-            .join(" ")
-            .toLowerCase();
-  
-        return searchableText.includes(
-          normalizedQuery,
-        );
-      },
-    );
   }

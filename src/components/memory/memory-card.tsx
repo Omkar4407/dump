@@ -1,23 +1,30 @@
 "use client";
 
 import {
+  memo,
   useEffect,
   useState,
 } from "react";
 
-import Image from "next/image";
-
 import {
   Check,
+  Code2,
+  Copy,
   Download,
   Edit3,
   ExternalLink,
   Eye,
   EyeOff,
   FileIcon,
-  Loader2,
+  FileText,
+  ImageIcon,
+  KeyRound,
+  Link2,
   MoreHorizontal,
+  Paperclip,
   Trash2,
+  Video,
+  Volume2,
 } from "lucide-react";
 
 import {
@@ -27,9 +34,7 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 
 import type {
@@ -43,12 +48,9 @@ import {
 
 type MemoryCardProps = {
   memory: Memory;
-  onEdit: (
-    memory: Memory,
-  ) => void;
-  onDelete: (
-    memory: Memory,
-  ) => Promise<void>;
+  searchMatches?: string[];
+  onEdit: (memory: Memory) => void;
+  onDelete: (memory: Memory) => Promise<void>;
 };
 
 type CredentialData = {
@@ -58,186 +60,120 @@ type CredentialData = {
   notes: string;
 };
 
-type AttachmentPreviewProps = {
-  attachment: MemoryAttachment;
-};
-
-function isHttpUrl(
-  value: string,
-): boolean {
+function isHttpUrl(value: string): boolean {
   try {
-    const url =
-      new URL(value);
-
-    return (
-      url.protocol ===
-        "http:" ||
-      url.protocol ===
-        "https:"
-    );
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
 }
 
-function parseCredentialData(
-  value: string,
-): CredentialData | null {
+function parseCredentialData(value: string): CredentialData | null {
   try {
-    const parsed =
-      JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
 
-    if (
-      typeof parsed !==
-        "object" ||
-      parsed === null
-    ) {
+    if (typeof parsed !== "object" || parsed === null) {
       return null;
     }
 
+    const record = parsed as Record<string, unknown>;
+
     return {
-      name:
-        typeof parsed.name ===
-        "string"
-          ? parsed.name
-          : "",
-
+      name: typeof record.name === "string" ? record.name : "",
       username:
-        typeof parsed.username ===
-        "string"
-          ? parsed.username
-          : "",
-
+        typeof record.username === "string" ? record.username : "",
       password:
-        typeof parsed.password ===
-        "string"
-          ? parsed.password
-          : "",
-
-      notes:
-        typeof parsed.notes ===
-        "string"
-          ? parsed.notes
-          : "",
+        typeof record.password === "string" ? record.password : "",
+      notes: typeof record.notes === "string" ? record.notes : "",
     };
   } catch {
     return null;
   }
 }
 
-function formatAttachmentSize(
-  bytes: number,
-): string {
-  if (
-    bytes < 1024
-  ) {
+function formatAttachmentSize(bytes: number): string {
+  if (bytes < 1024) {
     return `${bytes} B`;
   }
 
-  if (
-    bytes <
-    1024 * 1024
-  ) {
-    return `${(
-      bytes / 1024
-    ).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
   }
 
-  return `${(
-    bytes /
-    (1024 * 1024)
-  ).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function getTypeIcon(type: Memory["type"]) {
+  switch (type) {
+    case "Credential":
+      return KeyRound;
+    case "Link":
+      return Link2;
+    case "Code":
+      return Code2;
+    case "Image":
+      return ImageIcon;
+    case "Audio":
+      return Volume2;
+    case "Video":
+      return Video;
+    case "File":
+      return Paperclip;
+    default:
+      return FileText;
+  }
 }
 
 function AttachmentPreview({
   attachment,
-}: AttachmentPreviewProps) {
-  const [
-    objectUrl,
-    setObjectUrl,
-  ] = useState<string | null>(
-    null,
-  );
-
-  const [
-    isLoading,
-    setIsLoading,
-  ] = useState(true);
-
-  const [
-    error,
-    setError,
-  ] = useState<string | null>(
-    null,
-  );
+}: {
+  attachment: MemoryAttachment;
+}) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled =
-      false;
+    let cancelled = false;
+    let generatedUrl: string | null = null;
 
-    let generatedUrl:
-      | string
-      | null = null;
-
-    async function loadAttachment() {
-      setIsLoading(true);
-      setError(null);
-
+    async function load() {
       try {
-        const blob =
-          await downloadAttachment(
-            attachment.driveFileId,
-            attachment.iv,
-            attachment.mimeType,
-            attachment.fileName,
-          );
+        const blob = await downloadAttachment(
+          attachment.driveFileId,
+          attachment.iv,
+          attachment.mimeType,
+          attachment.fileName,
+        );
 
-        if (
-          cancelled
-        ) {
+        if (cancelled) {
           return;
         }
 
-        generatedUrl =
-          URL.createObjectURL(
-            blob,
+        generatedUrl = URL.createObjectURL(blob);
+        setObjectUrl(generatedUrl);
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Unable to load attachment.",
           );
-
-        setObjectUrl(
-          generatedUrl,
-        );
-      } catch (error) {
-        if (
-          cancelled
-        ) {
-          return;
-        }
-
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load attachment.",
-        );
-      } finally {
-        if (
-          !cancelled
-        ) {
-          setIsLoading(false);
         }
       }
     }
 
-    void loadAttachment();
+    void load();
 
     return () => {
       cancelled = true;
 
-      if (
-        generatedUrl
-      ) {
-        URL.revokeObjectURL(
-          generatedUrl,
-        );
+      if (generatedUrl) {
+        URL.revokeObjectURL(generatedUrl);
       }
     };
   }, [
@@ -249,282 +185,179 @@ function AttachmentPreview({
 
   async function handleDownload() {
     try {
-      const blob =
-        await downloadAttachment(
-          attachment.driveFileId,
-          attachment.iv,
-          attachment.mimeType,
-          attachment.fileName,
-        );
+      const blob = await downloadAttachment(
+        attachment.driveFileId,
+        attachment.iv,
+        attachment.mimeType,
+        attachment.fileName,
+      );
 
-      const url =
-        URL.createObjectURL(
-          blob,
-        );
-
-      const link =
-        document.createElement(
-          "a",
-        );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
 
       link.href = url;
-      link.download =
-        attachment.fileName;
+      link.download = attachment.fileName;
 
-      document.body.appendChild(
-        link,
-      );
-
+      document.body.appendChild(link);
       link.click();
-
       link.remove();
 
-      URL.revokeObjectURL(
-        url,
-      );
-    } catch (error) {
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
       setError(
-        error instanceof Error
-          ? error.message
+        downloadError instanceof Error
+          ? downloadError.message
           : "Unable to download attachment.",
       );
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-32 items-center justify-center rounded-lg border bg-muted/20">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Decrypting attachment...
-        </div>
-      </div>
-    );
-  }
+  const isImage = attachment.type === "Image";
+  const isAudio = attachment.type === "Audio";
+  const isVideo = attachment.type === "Video";
 
-  if (error) {
-    return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-destructive">
-            {error}
+  return (
+    <div className="overflow-hidden rounded-xl border bg-muted/20">
+      {error ? (
+        <div className="flex min-h-24 items-center justify-center px-4 text-center text-xs text-destructive">
+          {error}
+        </div>
+      ) : objectUrl && isImage ? (
+        <img
+          src={objectUrl}
+          alt={attachment.fileName}
+          loading="lazy"
+          className="max-h-[420px] w-full object-contain bg-muted/10"
+        />
+      ) : objectUrl && isAudio ? (
+        <div className="p-4">
+          <audio
+            controls
+            src={objectUrl}
+            className="w-full"
+          />
+        </div>
+      ) : objectUrl && isVideo ? (
+        <video
+          controls
+          src={objectUrl}
+          className="max-h-[420px] w-full bg-black"
+        />
+      ) : !isImage && !isAudio && !isVideo ? (
+        <div className="flex items-center gap-3 p-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-background">
+            <FileIcon className="size-5 text-muted-foreground" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">
+              {attachment.fileName}
+            </p>
+
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {formatAttachmentSize(attachment.size)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
+          Loading attachment…
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3 border-t px-3 py-2.5">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium">
+            {attachment.fileName}
           </p>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={
-              handleDownload
-            }
-          >
-            <Download className="mr-2 size-4" />
-            Retry
-          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            {formatAttachmentSize(attachment.size)}
+          </p>
         </div>
-      </div>
-    );
-  }
 
-  if (!objectUrl) {
+        <Button
+          variant="ghost"
+          size="sm"
+          className="shrink-0"
+          onClick={handleDownload}
+        >
+          <Download className="mr-2 size-3.5" />
+          Download
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SearchMatchContext({
+  matches,
+}: {
+  matches: string[];
+}) {
+  if (matches.length === 0) {
     return null;
   }
 
-  if (
-    attachment.type ===
-    "Image"
-  ) {
-    return (
-      <div className="space-y-3">
-        <div className="overflow-hidden rounded-lg border bg-muted/20">
-        <Image
-  src={objectUrl}
-  alt={attachment.fileName}
-  width={1200}
-  height={800}
-  unoptimized
-  className="max-h-[500px] w-full object-contain"
-/>
-        </div>
+  const labels: Record<string, string> = {
+    exact: "Exact match",
+    description: "Title",
+    content: "Content",
+    tag: "Tag",
+    metadata: "Metadata",
+    attachment: "Attachment",
+    type: "Type",
+    semantic: "Related",
+  };
 
-        <AttachmentFooter
-          attachment={
-            attachment
-          }
-          onDownload={
-            handleDownload
-          }
-        />
-      </div>
-    );
-  }
+  const visible = matches
+    .map((match) => labels[match] ?? match)
+    .filter((value, index, array) => array.indexOf(value) === index)
+    .slice(0, 4);
 
-  if (
-    attachment.type ===
-    "Audio"
-  ) {
-    return (
-      <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-        <audio
-          controls
-          src={objectUrl}
-          className="w-full"
-        />
-
-        <AttachmentFooter
-          attachment={
-            attachment
-          }
-          onDownload={
-            handleDownload
-          }
-        />
-      </div>
-    );
-  }
-
-  if (
-    attachment.type ===
-    "Video"
-  ) {
-    return (
-      <div className="space-y-3">
-        <div className="overflow-hidden rounded-lg border bg-black">
-          <video
-            controls
-            src={objectUrl}
-            className="max-h-[500px] w-full"
-          />
-        </div>
-
-        <AttachmentFooter
-          attachment={
-            attachment
-          }
-          onDownload={
-            handleDownload
-          }
-        />
-      </div>
-    );
+  if (visible.length === 0) {
+    return null;
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/20 p-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background">
-          <FileIcon className="size-5 text-muted-foreground" />
-        </div>
+    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-muted-foreground">
+        Matched in
+      </span>
 
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">
-            {attachment.fileName}
-          </p>
-
-          <p className="text-xs text-muted-foreground">
-            {formatAttachmentSize(
-              attachment.size,
-            )}
-          </p>
-        </div>
-      </div>
-
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={
-          handleDownload
-        }
-      >
-        <Download className="mr-2 size-4" />
-        Download
-      </Button>
+      {visible.map((label) => (
+        <span
+          key={label}
+          className="rounded-full border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground"
+        >
+          {label}
+        </span>
+      ))}
     </div>
   );
 }
 
-function AttachmentFooter({
-  attachment,
-  onDownload,
-}: {
-  attachment: MemoryAttachment;
-  onDownload: () => Promise<void>;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">
-          {attachment.fileName}
-        </p>
-
-        <p className="text-xs text-muted-foreground">
-          {formatAttachmentSize(
-            attachment.size,
-          )}
-        </p>
-      </div>
-
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={
-          onDownload
-        }
-      >
-        <Download className="mr-2 size-4" />
-        Download
-      </Button>
-    </div>
-  );
-}
-
-export function MemoryCard({
+export const MemoryCard = memo(function MemoryCard({
   memory,
+  searchMatches = [],
   onEdit,
   onDelete,
 }: MemoryCardProps) {
-  const [
-    menuOpen,
-    setMenuOpen,
-  ] = useState(false);
-
-  const [
-    isDeleting,
-    setIsDeleting,
-  ] = useState(false);
-
-  const [
-    credentialVisible,
-    setCredentialVisible,
-  ] = useState(false);
-
-  const [
-    copied,
-    setCopied,
-  ] = useState(false);
-
-  const isLink =
-    memory.type ===
-      "Link" &&
-    isHttpUrl(memory.data);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [credentialVisible, setCredentialVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const credential =
-    memory.type ===
-    "Credential"
-      ? parseCredentialData(
-          memory.data,
-        )
+    memory.type === "Credential"
+      ? parseCredentialData(memory.data)
       : null;
 
-  const language =
-    memory.metadata
-      ?.language ??
-    "plaintext";
+  const TypeIcon = getTypeIcon(memory.type);
 
   async function handleDelete() {
-    const confirmed =
-      window.confirm(
-        "Delete this memory? This cannot be undone.",
-      );
+    const confirmed = window.confirm(
+      "Delete this memory? This cannot be undone.",
+    );
 
     if (!confirmed) {
       return;
@@ -533,9 +366,7 @@ export function MemoryCard({
     setIsDeleting(true);
 
     try {
-      await onDelete(
-        memory,
-      );
+      await onDelete(memory);
     } finally {
       setIsDeleting(false);
       setMenuOpen(false);
@@ -543,31 +374,20 @@ export function MemoryCard({
   }
 
   async function handleCopyPassword() {
-    if (
-      !credential?.password
-    ) {
+    if (!credential?.password) {
       return;
     }
 
-    await navigator.clipboard.writeText(
-      credential.password,
-    );
-
+    await navigator.clipboard.writeText(credential.password);
     setCopied(true);
 
-    window.setTimeout(
-      () => {
-        setCopied(false);
-      },
-      1500,
-    );
+    window.setTimeout(() => {
+      setCopied(false);
+    }, 1500);
   }
 
   function renderContent() {
-    if (
-      memory.type ===
-      "Credential"
-    ) {
+    if (memory.type === "Credential") {
       if (!credential) {
         return (
           <p className="text-sm text-destructive">
@@ -577,34 +397,34 @@ export function MemoryCard({
       }
 
       return (
-        <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
-          <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">
-              Service
-            </span>
+        <div className="rounded-xl border bg-muted/20 p-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Service
+              </p>
+              <p className="mt-1 truncate text-sm font-medium">
+                {credential.name || "Unnamed service"}
+              </p>
+            </div>
 
-            <span className="text-sm font-medium">
-              {credential.name}
-            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Username
+              </p>
+              <p className="mt-1 truncate text-sm">
+                {credential.username}
+              </p>
+            </div>
           </div>
 
-          <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">
-              Username
-            </span>
-
-            <span className="break-all text-sm">
-              {credential.username}
-            </span>
-          </div>
-
-          <div className="grid gap-2">
-            <span className="text-xs text-muted-foreground">
+          <div className="mt-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Password
-            </span>
+            </p>
 
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all rounded-md border bg-background px-3 py-2 text-sm">
+            <div className="mt-1.5 flex gap-2">
+              <code className="min-w-0 flex-1 overflow-hidden rounded-lg border bg-background px-3 py-2 text-sm">
                 {credentialVisible
                   ? credential.password
                   : "••••••••••••"}
@@ -618,11 +438,13 @@ export function MemoryCard({
                     ? "Hide password"
                     : "Show password"
                 }
+                title={
+                  credentialVisible
+                    ? "Hide password"
+                    : "Show password"
+                }
                 onClick={() =>
-                  setCredentialVisible(
-                    (value) =>
-                      !value,
-                  )
+                  setCredentialVisible((value) => !value)
                 }
               >
                 {credentialVisible ? (
@@ -636,28 +458,24 @@ export function MemoryCard({
                 variant="outline"
                 size="icon"
                 aria-label="Copy password"
-                onClick={
-                  handleCopyPassword
-                }
+                title="Copy password"
+                onClick={handleCopyPassword}
               >
                 {copied ? (
                   <Check className="size-4" />
                 ) : (
-                  <span className="text-xs">
-                    Copy
-                  </span>
+                  <Copy className="size-4" />
                 )}
               </Button>
             </div>
           </div>
 
           {credential.notes && (
-            <div className="grid gap-1">
-              <span className="text-xs text-muted-foreground">
+            <div className="mt-4 border-t pt-4">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Notes
-              </span>
-
-              <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+              </p>
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground">
                 {credential.notes}
               </p>
             </div>
@@ -666,131 +484,128 @@ export function MemoryCard({
       );
     }
 
-    if (
-      memory.type ===
-      "Code"
-    ) {
+    if (memory.type === "Link" && isHttpUrl(memory.data)) {
       return (
-        <div className="overflow-hidden rounded-lg border">
-          <div className="flex items-center justify-between border-b bg-muted/50 px-3 py-2">
-            <span className="text-xs text-muted-foreground">
-              {language}
-            </span>
+        <a
+          href={memory.data}
+          target="_blank"
+          rel="noreferrer"
+          className="group flex items-center gap-3 rounded-xl border bg-muted/20 p-4 transition-colors hover:bg-muted/40"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-background">
+            <Link2 className="size-5 text-muted-foreground" />
           </div>
 
-          <pre className="max-h-96 overflow-auto bg-muted/20 p-4">
-            <code className="font-mono text-sm">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground">
+              Link
+            </p>
+            <p className="mt-0.5 truncate text-sm font-medium">
               {memory.data}
-            </code>
+            </p>
+          </div>
+
+          <ExternalLink className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </a>
+      );
+    }
+
+    if (memory.type === "Code") {
+      const language = memory.metadata?.language ?? "plaintext";
+
+      return (
+        <div className="overflow-hidden rounded-xl border bg-zinc-950">
+          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+              {language}
+            </span>
+            <Code2 className="size-3.5 text-zinc-500" />
+          </div>
+
+          <pre className="max-h-80 overflow-auto p-4 text-xs leading-6 text-zinc-200">
+            <code>{memory.data}</code>
           </pre>
         </div>
       );
     }
 
-    if (isLink) {
-      return (
-        <a
-          href={memory.data}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group flex items-center gap-2 break-all text-sm underline underline-offset-4"
-        >
-          <span>
-            {memory.data}
-          </span>
-
-          <ExternalLink className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
-        </a>
-      );
-    }
-
     if (
-      memory.attachments &&
-      memory.attachments.length >
-        0
+      ["Image", "File", "Audio", "Video"].includes(memory.type) &&
+      memory.attachments?.length
     ) {
       return (
-        <div className="space-y-4">
-          {memory.data && (
-            <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
-              {memory.data}
-            </p>
-          )}
-
-          {memory.attachments.map(
-            (attachment) => (
-              <AttachmentPreview
-                key={
-                  attachment.id
-                }
-                attachment={
-                  attachment
-                }
-              />
-            ),
-          )}
+        <div className="grid gap-3">
+          {memory.attachments.map((attachment) => (
+            <AttachmentPreview
+              key={attachment.id}
+              attachment={attachment}
+            />
+          ))}
         </div>
       );
     }
 
+    if (!memory.data) {
+      return (
+        <p className="text-sm italic text-muted-foreground">
+          No text content
+        </p>
+      );
+    }
+
     return (
-      <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
         {memory.data}
       </p>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <CardTitle className="text-lg">
-              {memory.description}
-            </CardTitle>
-
-            <CardDescription>
-              {new Date(
-                memory.updatedAt,
-              ).toLocaleString()}
-            </CardDescription>
+    <Card className="overflow-visible border-border/80 shadow-sm transition-shadow hover:shadow-md">
+      <CardHeader className="pb-3">
+        <div className="flex items-start gap-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted/30">
+            <TypeIcon className="size-4 text-muted-foreground" />
           </div>
 
-          <div className="relative flex shrink-0 items-center gap-2">
-            <span className="rounded-full border px-2 py-1 text-xs">
-              {memory.type}
-            </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="min-w-0 truncate text-base font-semibold tracking-tight sm:text-lg">
+                {memory.description}
+              </h2>
 
+              <span className="shrink-0 rounded-full border bg-background px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {memory.type}
+              </span>
+            </div>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              {new Date(memory.updatedAt).toLocaleString()}
+            </p>
+
+            <SearchMatchContext matches={searchMatches} />
+          </div>
+
+          <div className="relative shrink-0">
             <Button
               variant="ghost"
               size="icon"
               aria-label="Memory actions"
-              onClick={() =>
-                setMenuOpen(
-                  (value) =>
-                    !value,
-                )
-              }
-              disabled={
-                isDeleting
-              }
+              title="Memory actions"
+              onClick={() => setMenuOpen((value) => !value)}
+              disabled={isDeleting}
             >
               <MoreHorizontal className="size-4" />
             </Button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-10 z-20 w-40 rounded-md border bg-background p-1 shadow-lg">
+              <div className="absolute right-0 top-10 z-30 w-40 rounded-lg border bg-background p-1 shadow-lg">
                 <button
                   type="button"
-                  className="flex w-full items-center rounded-sm px-3 py-2 text-sm hover:bg-muted"
+                  className="flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
                   onClick={() => {
-                    setMenuOpen(
-                      false,
-                    );
-
-                    onEdit(
-                      memory,
-                    );
+                    setMenuOpen(false);
+                    onEdit(memory);
                   }}
                 >
                   <Edit3 className="mr-2 size-4" />
@@ -799,19 +614,12 @@ export function MemoryCard({
 
                 <button
                   type="button"
-                  className="flex w-full items-center rounded-sm px-3 py-2 text-sm text-destructive hover:bg-muted"
-                  onClick={
-                    handleDelete
-                  }
-                  disabled={
-                    isDeleting
-                  }
+                  className="flex w-full items-center rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-muted"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
                 >
                   <Trash2 className="mr-2 size-4" />
-
-                  {isDeleting
-                    ? "Deleting..."
-                    : "Delete"}
+                  {isDeleting ? "Deleting…" : "Delete"}
                 </button>
               </div>
             )}
@@ -819,26 +627,22 @@ export function MemoryCard({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-1">
         {renderContent()}
 
-        {memory.tags &&
-          memory.tags.length >
-            0 && (
-            <div className="flex flex-wrap gap-2">
-              {memory.tags.map(
-                (tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-                  >
-                    #{tag}
-                  </span>
-                ),
-              )}
-            </div>
-          )}
+        {memory.tags && memory.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 border-t pt-4">
+            {memory.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
-}
+});
