@@ -53,7 +53,6 @@ type MemoryInput = {
   type: MemoryType;
   data: string;
   description: string;
-  tags: string[];
   metadata?: Record<string, string>;
   attachments?: MemoryAttachment[];
 };
@@ -87,21 +86,6 @@ function isValidUrl(
   }
 }
 
-function parseTags(
-  value: string,
-): string[] {
-  return [
-    ...new Set(
-      value
-        .split(",")
-        .map((tag) =>
-          tag.trim().replace(/^#/, ""),
-        )
-        .filter(Boolean),
-    ),
-  ];
-}
-
 function getInitialState(
   mode: "create" | "edit",
   memory?: Memory | null,
@@ -119,7 +103,6 @@ function getInitialState(
       type: memory.type,
       description: memory.description,
       data: isCredential ? "" : memory.data,
-      tags: (memory.tags ?? []).join(", "),
       codeLanguage:
         metadata.language ?? "plaintext",
       credentialName: credential?.name ?? "",
@@ -137,7 +120,6 @@ function getInitialState(
     type: "Text" as MemoryType,
     description: "",
     data: "",
-    tags: "",
     codeLanguage: "plaintext",
     credentialName: "",
     credentialUsername: "",
@@ -244,7 +226,6 @@ export function MemoryComposer({
     type,
     description,
     data,
-    tags,
     codeLanguage,
     credentialName,
     credentialUsername,
@@ -531,7 +512,6 @@ export function MemoryComposer({
         type,
         data: finalData,
         description: trimmedDescription,
-        tags: parseTags(tags),
         metadata,
         attachments: combinedAttachments,
       };
@@ -1069,35 +1049,6 @@ export function MemoryComposer({
             </p>
 
             {renderContentField()}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <p className="label-mono text-muted-foreground">
-              04 — Tags
-            </p>
-
-            <FieldLabel
-              htmlFor="memory-tags"
-              hint="Optional"
-            >
-              Tags
-            </FieldLabel>
-
-            <Input
-              id="memory-tags"
-              placeholder="college, project, important"
-              value={tags}
-              onChange={(event) =>
-                updateDraft({
-                  tags: event.target.value,
-                })
-              }
-              disabled={isSaving}
-            />
-
-            <p className="label-mono text-muted-foreground">
-              Separate with commas · you never have to organize
-            </p>
           </div>
 
           {uploadStatus && (

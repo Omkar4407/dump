@@ -61,7 +61,6 @@ import {
 import {
   createMemoryInVault,
   deleteMemoryFromVault,
-  getMemoryTagsFromVault,
   getMemoryTypesFromVault,
   searchMemoryResultsInVault,
   updateMemoryInVault,
@@ -119,7 +118,6 @@ type MemoryInput = {
   type: MemoryType;
   data: string;
   description: string;
-  tags: string[];
   metadata?: Record<string, string>;
   attachments?: MemoryAttachment[];
 };
@@ -127,8 +125,6 @@ type MemoryInput = {
 const MAX_RECENT_SEARCHES = 5;
 
 const SEARCH_DEBOUNCE_MS = 180;
-
-const MAX_VISIBLE_TAG_FILTERS = 10;
 
 const SORT_OPTIONS: {
   value: MemorySort;
@@ -290,9 +286,6 @@ export function VaultApp({
     "All",
   );
 
-  const [selectedTag, setSelectedTag] =
-    useState("");
-
   const [
     selectedSort,
     setSelectedSort,
@@ -303,11 +296,6 @@ export function VaultApp({
   const [
     filtersOpen,
     setFiltersOpen,
-  ] = useState(false);
-
-  const [
-    showAllTagFilters,
-    setShowAllTagFilters,
   ] = useState(false);
 
   const [
@@ -1086,7 +1074,6 @@ export function VaultApp({
     setSearch("");
     setRecentSearches([]);
     setSelectedType("All");
-    setSelectedTag("");
     setSelectedSort("relevance");
     setSearchResults([]);
     setError("");
@@ -1098,7 +1085,6 @@ export function VaultApp({
     setOpenMemoryId(null);
     setDeleteMemoryId(null);
     setFiltersOpen(false);
-    setShowAllTagFilters(false);
     setSaveStatus("saved");
 
     setStatus("unlock");
@@ -1164,7 +1150,6 @@ export function VaultApp({
   function handleClearSearchAndFilters() {
     setSearch("");
     setSelectedType("All");
-    setSelectedTag("");
     setSelectedSort("relevance");
   }
 
@@ -1172,13 +1157,8 @@ export function VaultApp({
     ? getMemoryTypesFromVault(vault)
     : [];
 
-  const memoryTags = vault
-    ? getMemoryTagsFromVault(vault)
-    : [];
-
   const hasActiveFilters =
-    selectedType !== "All" ||
-    selectedTag !== "";
+    selectedType !== "All";
 
   const hasActiveSearch =
     search.trim().length > 0;
@@ -1262,7 +1242,6 @@ export function VaultApp({
               {
                 query: "",
                 type: selectedType,
-                tag: selectedTag,
               },
             );
 
@@ -1293,7 +1272,6 @@ export function VaultApp({
                 {
                   query: "",
                   type: selectedType,
-                  tag: selectedTag,
                 },
               ).map(
                 (result) =>
@@ -1320,8 +1298,6 @@ export function VaultApp({
                       normalizedQuery,
                     type:
                       selectedType,
-                    tag:
-                      selectedTag,
                   },
                 );
 
@@ -1405,8 +1381,6 @@ export function VaultApp({
                     normalizedQuery,
                   type:
                     selectedType,
-                  tag:
-                    selectedTag,
                 },
               );
 
@@ -1435,7 +1409,6 @@ export function VaultApp({
     vault,
     search,
     selectedType,
-    selectedTag,
     semanticIndexReady,
     semanticIndexVersion,
   ]);
@@ -1737,20 +1710,11 @@ export function VaultApp({
         memory.id === deleteMemoryId,
     ) ?? null;
 
-  const visibleTagFilters =
-    showAllTagFilters
-      ? memoryTags
-      : memoryTags.slice(
-          0,
-          MAX_VISIBLE_TAG_FILTERS,
-        );
-
   const resultCount =
     displayedResults.length;
 
   const activeFilterCount =
-    (selectedType !== "All" ? 1 : 0) +
-    (selectedTag !== "" ? 1 : 0);
+    selectedType !== "All" ? 1 : 0;
 
   const statusLabel =
     isSemanticIndexing
@@ -1920,58 +1884,6 @@ export function VaultApp({
                   ))}
                 </div>
               </div>
-
-              {memoryTags.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <h2 className="label-mono text-muted-foreground">
-                    Tags
-                  </h2>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    <FilterChip
-                      active={selectedTag === ""}
-                      onClick={() => setSelectedTag("")}
-                    >
-                      All
-                    </FilterChip>
-
-                    {visibleTagFilters.map((tag) => (
-                      <FilterChip
-                        key={tag}
-                        active={selectedTag === tag}
-                        activeClassName="bg-lemon text-ink"
-                        onClick={() =>
-                          setSelectedTag(
-                            selectedTag === tag ? "" : tag,
-                          )
-                        }
-                      >
-                        #{tag}
-                      </FilterChip>
-                    ))}
-
-                    {memoryTags.length >
-                      MAX_VISIBLE_TAG_FILTERS && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowAllTagFilters(
-                            (value) => !value,
-                          )
-                        }
-                        className="label-mono rounded-full px-2.5 py-1.5 text-violet underline underline-offset-4 outline-none"
-                      >
-                        {showAllTagFilters
-                          ? "Fewer"
-                          : `+${
-                              memoryTags.length -
-                              MAX_VISIBLE_TAG_FILTERS
-                            }`}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
 
               <div className="flex flex-col gap-2">
                 <label

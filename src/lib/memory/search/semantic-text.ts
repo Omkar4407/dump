@@ -254,10 +254,27 @@ function chunkContent(
   return chunks;
 }
 
-export function buildSemanticFacets(
+export type WeightedSemanticFacet = {
+  text: string;
+
+  /*
+   * How much this view is worth as evidence.
+   *
+   * A structural facet only says what kind of
+   * thing a memory is, not what it is about,
+   * so it bridges domain queries without being
+   * allowed to outrank a real description or
+   * content match.
+   */
+  weight: number;
+};
+
+const STRUCTURAL_FACET_WEIGHT = 0.82;
+
+export function buildWeightedSemanticFacets(
   memory: Memory,
-): string[] {
-  const facets: string[] = [];
+): WeightedSemanticFacet[] {
+  const facets: WeightedSemanticFacet[] = [];
 
   /*
    * Identity facet: what this memory is,
@@ -293,7 +310,10 @@ export function buildSemanticFacets(
   }
 
   if (identity.length > 0) {
-    facets.push(identity.join("\n"));
+    facets.push({
+      text: identity.join("\n"),
+      weight: 1,
+    });
   }
 
   /*
@@ -306,7 +326,10 @@ export function buildSemanticFacets(
   );
 
   if (description) {
-    facets.push(description);
+    facets.push({
+      text: description,
+      weight: 1,
+    });
   }
 
   /*
@@ -327,10 +350,9 @@ export function buildSemanticFacets(
    * alone would turn every plain memory into
    * an attractor and destroy precision.
    */
-  const structural = [
+  const structuralExtras = [
     ...new Set(
       [
-        memory.type,
         ...Object.values(
           memory.metadata ?? {},
         ),
@@ -343,8 +365,36 @@ export function buildSemanticFacets(
     ),
   ];
 
-  if (structural.length > 1) {
-    facets.push(structural.join(" "));
+  /*
+   * "Text" and "Other" say nothing about a
+   * memory — measured against unrelated
+   * queries they carry no discriminating
+   * signal at all, so indexing them would
+   * turn every plain memory into an
+   * attractor. Every other type is strongly
+   * discriminating and is always indexed,
+   * even with no metadata to accompany it,
+   * so a snippet saved without a language
+   * is still reachable by "coding".
+   */
+  const isGenericType =
+    memory.type === "Text" ||
+    memory.type === "Other";
+
+  const structural = isGenericType
+    ? structuralExtras
+    : [
+        ...new Set([
+          normalizeText(memory.type),
+          ...structuralExtras,
+        ]),
+      ];
+
+  if (structural.length > 0) {
+    facets.push({
+      text: structural.join(" "),
+      weight: STRUCTURAL_FACET_WEIGHT,
+    });
   }
 
   /*
@@ -355,9 +405,30 @@ export function buildSemanticFacets(
     for (
       const chunk of chunkContent(memory.data)
     ) {
-      facets.push(chunk);
+      facets.push({
+        text: chunk,
+        weight: 1,
+      });
     }
   }
 
-  return [...new Set(facets.filter(Boolean))];
+  const seen = new Set<string>();
+
+  return facets.filter((facet) => {
+    if (!facet.text || seen.has(facet.text)) {
+      return false;
+    }
+
+    seen.add(facet.text);
+
+    return true;
+  });
+}
+
+export function buildSemanticFacets(
+  memory: Memory,
+): string[] {
+  return buildWeightedSemanticFacets(
+    memory,
+  ).map((facet) => facet.text);
 }

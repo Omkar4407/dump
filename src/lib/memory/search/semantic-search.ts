@@ -37,9 +37,27 @@ function scoreAgainstEntry(
 ): number {
   let best = Number.NEGATIVE_INFINITY;
 
-  const targets = [
-    entry.embedding,
-    ...(entry.facetEmbeddings ?? []),
+  const facetEmbeddings =
+    entry.facetEmbeddings ?? [];
+
+  const facetWeights =
+    entry.facetWeights ?? [];
+
+  const targets: {
+    embedding: Float32Array;
+    weight: number;
+  }[] = [
+    {
+      embedding: entry.embedding,
+      weight: 1,
+    },
+
+    ...facetEmbeddings.map(
+      (embedding, index) => ({
+        embedding,
+        weight: facetWeights[index] ?? 1,
+      }),
+    ),
   ];
 
   for (
@@ -49,8 +67,8 @@ function scoreAgainstEntry(
       const score =
         cosineSimilarity(
           queryEmbedding,
-          target,
-        );
+          target.embedding,
+        ) * target.weight;
 
       if (score > best) {
         best = score;

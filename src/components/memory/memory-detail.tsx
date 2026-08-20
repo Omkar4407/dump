@@ -361,8 +361,6 @@ export function MemoryDetail({
     return null;
   }
 
-  const tags = memory.tags ?? [];
-
   const style = MEMORY_TYPE_STYLES[memory.type];
 
   const extraMetadata = Object.entries(
@@ -469,27 +467,6 @@ export function MemoryDetail({
               </dl>
             </section>
           )}
-
-          <section className="flex flex-col gap-3">
-            <SectionLabel dot="bg-lemon">Tags</SectionLabel>
-
-            {tags.length > 0 ? (
-              <ul className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <li
-                    key={tag}
-                    className="label-mono rounded-full bg-lemon px-3 py-2 text-ink"
-                  >
-                    #{tag}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="label-mono text-muted-foreground">
-                No tags
-              </p>
-            )}
-          </section>
 
           <p className="label-mono text-muted-foreground">
             Created {formatMemoryDateTime(memory.createdAt)}

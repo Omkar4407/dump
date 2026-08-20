@@ -34,8 +34,6 @@ const MATCH_LABELS: Record<string, string> = {
   semantic: "Related",
 };
 
-const MAX_VISIBLE_TAGS = 3;
-
 function MatchContext({
   matches,
 }: {
@@ -93,12 +91,6 @@ export const MemoryCard = memo(function MemoryCard({
   onEdit,
   onRequestDelete,
 }: MemoryCardProps) {
-  const tags = memory.tags ?? [];
-
-  const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
-
-  const hiddenTagCount = tags.length - visibleTags.length;
-
   const summaryLine = getMemorySummaryLine(memory);
 
   const style = MEMORY_TYPE_STYLES[memory.type];
@@ -171,25 +163,6 @@ export const MemoryCard = memo(function MemoryCard({
           </>
         )}
       </div>
-
-      {tags.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
-          {visibleTags.map((tag) => (
-            <li
-              key={tag}
-              className={`label-mono rounded-full px-2 py-1 ${style.tint}`}
-            >
-              #{tag}
-            </li>
-          ))}
-
-          {hiddenTagCount > 0 && (
-            <li className="label-mono rounded-full bg-secondary px-2 py-1 text-muted-foreground">
-              +{hiddenTagCount}
-            </li>
-          )}
-        </ul>
-      )}
 
       <MatchContext matches={searchMatches} />
 

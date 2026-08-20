@@ -7,8 +7,8 @@ import {
 } from "@/lib/memory/search/embedding";
 
 import {
-  buildSemanticFacets,
   buildSemanticText,
+  buildWeightedSemanticFacets,
   canEmbedMemory,
 } from "@/lib/memory/search/semantic-text";
 
@@ -30,6 +30,12 @@ export type SemanticIndexEntry = {
    * single averaged vector.
    */
   facetEmbeddings: Float32Array[];
+
+  /*
+   * Evidence weight of each facet, aligned by
+   * index with `facetEmbeddings`.
+   */
+  facetWeights: number[];
 
   text: string;
 };
@@ -123,7 +129,7 @@ export class SemanticIndex {
       this.generation;
 
     const facets =
-      buildSemanticFacets(
+      buildWeightedSemanticFacets(
         memory,
       );
 
@@ -134,7 +140,7 @@ export class SemanticIndex {
       generateEmbedding(text),
       ...facets.map(
         (facet) =>
-          generateEmbedding(facet),
+          generateEmbedding(facet.text),
       ),
     ]);
 
@@ -162,6 +168,10 @@ export class SemanticIndex {
         embedding,
 
         facetEmbeddings,
+
+        facetWeights: facets.map(
+          (facet) => facet.weight,
+        ),
 
         text,
       };

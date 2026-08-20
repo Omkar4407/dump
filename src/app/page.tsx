@@ -77,7 +77,7 @@ export default async function Home() {
         viewport is too short to hold it, so the
         page itself never scrolls.
       */}
-      <div className="tile-scroll flex-1 px-4 pb-4 sm:px-6 sm:pb-6">
+      <div className="tile-scroll min-h-0 flex-1 px-4 sm:px-6">
         <div className="grid min-h-full auto-rows-min grid-cols-1 gap-3 sm:gap-4 lg:h-full lg:min-h-0 lg:auto-rows-auto lg:grid-cols-12 lg:grid-rows-6">
           <section className="tile relative flex min-h-52 flex-col justify-center overflow-hidden bg-card p-6 [--edge:var(--border)] sm:p-8 lg:col-span-8 lg:row-span-4">
             <Squiggle
@@ -180,6 +180,31 @@ export default async function Home() {
           ))}
         </div>
       </div>
+
+      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 sm:px-6">
+        <span className="label-mono text-muted-foreground">
+          Private by design
+        </span>
+
+        <nav
+          className="flex items-center gap-4"
+          aria-label="Legal"
+        >
+          <Link
+            href="/privacy"
+            className="label-mono rounded-full text-muted-foreground underline decoration-violet decoration-2 underline-offset-4 outline-none hover:text-foreground"
+          >
+            Privacy
+          </Link>
+
+          <Link
+            href="/terms"
+            className="label-mono rounded-full text-muted-foreground underline decoration-violet decoration-2 underline-offset-4 outline-none hover:text-foreground"
+          >
+            Terms
+          </Link>
+        </nav>
+      </footer>
     </main>
   );
 }
