@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
@@ -16,37 +18,32 @@ export default async function VaultPage() {
     "unknown-user";
 
   return (
-    <main className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-md border bg-muted/30">
-              <span className="text-sm font-semibold tracking-tight">
-                D
-              </span>
-            </div>
+    <main className="ground shell flex flex-col">
+      <header className="flex shrink-0 items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 rounded-2xl outline-none"
+          >
+            <span
+              className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-violet text-lg font-extrabold text-white shadow-[0_4px_0_0_var(--violet-deep)]"
+              aria-hidden="true"
+            >
+              D
+            </span>
 
-            <div>
-              <div className="text-sm font-semibold tracking-tight">
-                DUMP
-              </div>
+            <span className="display text-xl sm:text-2xl">
+              Dump
+            </span>
+          </Link>
 
-              <div className="hidden text-[11px] text-muted-foreground sm:block">
-                Private memory vault
-              </div>
-            </div>
-          </div>
+          <span className="label-mono hidden rounded-full bg-lemon px-2.5 py-1.5 text-ink sm:inline-block">
+            Vault
+          </span>
+        </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
-              <span className="size-1.5 rounded-full bg-foreground/50" />
-              Secure
-            </div>
-
-            <div className="hidden max-w-48 truncate text-xs text-muted-foreground md:block">
-              {session.user.email}
-            </div>
-          </div>
+        <div className="label-mono max-w-[45%] truncate text-muted-foreground">
+          {session.user.email}
         </div>
       </header>
 

@@ -22,6 +22,45 @@ export type SemanticSearchResult = {
   entry: SemanticIndexEntry;
 };
 
+/*
+ * Best similarity between any query vector
+ * and any indexed view of the memory.
+ *
+ * Max-pooling keeps a strong match on one
+ * facet from being averaged away by the
+ * parts of the memory the query never
+ * referred to.
+ */
+function scoreAgainstEntry(
+  queryEmbeddings: Float32Array[],
+  entry: SemanticIndexEntry,
+): number {
+  let best = Number.NEGATIVE_INFINITY;
+
+  const targets = [
+    entry.embedding,
+    ...(entry.facetEmbeddings ?? []),
+  ];
+
+  for (
+    const queryEmbedding of queryEmbeddings
+  ) {
+    for (const target of targets) {
+      const score =
+        cosineSimilarity(
+          queryEmbedding,
+          target,
+        );
+
+      if (score > best) {
+        best = score;
+      }
+    }
+  }
+
+  return best;
+}
+
 export type SemanticNeighbor = {
   memory: Memory;
   score: number;
@@ -89,9 +128,9 @@ export async function discoverSemanticNeighbors(
     }
 
     const score =
-      cosineSimilarity(
-        queryEmbedding,
-        entry.embedding,
+      scoreAgainstEntry(
+        [queryEmbedding],
+        entry,
       );
 
     if (
@@ -273,34 +312,18 @@ export async function searchSemantic(
       continue;
     }
 
-    let bestScore =
-  Number.NEGATIVE_INFINITY;
+    const bestScore =
+      scoreAgainstEntry(
+        queryEmbeddings,
+        entry,
+      );
 
-for (
-  const queryEmbedding of
-    queryEmbeddings
-) {
-  const score =
-    cosineSimilarity(
-      queryEmbedding,
-      entry.embedding,
-    );
-
-  if (
-    score >
-    bestScore
-  ) {
-    bestScore =
-      score;
-  }
-}
-
-if (
-  bestScore <
-  threshold
-) {
-  continue;
-}
+    if (
+      bestScore <
+      threshold
+    ) {
+      continue;
+    }
 
 results.push({
   memory,

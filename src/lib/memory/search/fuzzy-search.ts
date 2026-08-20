@@ -2,6 +2,10 @@ import type {
   Memory,
 } from "@/types/memory";
 
+import {
+  getSearchableCredentialText,
+} from "@/lib/memory/search/credential-fields";
+
 export type FuzzySearchField =
   | "description"
   | "content"
@@ -302,16 +306,22 @@ function getSearchableFields(
     /*
      * IMPORTANT:
      *
-     * Credential data is deliberately
+     * Credential secrets are deliberately
      * excluded from fuzzy search.
      *
-     * Search should never inspect or
-     * rank against credential passwords.
+     * Only the service name and username
+     * are exposed. Search must never
+     * inspect or rank against credential
+     * passwords or notes.
      */
     content:
       memory.type ===
       "Credential"
-        ? ""
+        ? normalizeText(
+            getSearchableCredentialText(
+              memory,
+            ),
+          )
         : normalizeText(
             memory.data,
           ),

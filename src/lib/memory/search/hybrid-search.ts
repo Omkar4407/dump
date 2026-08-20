@@ -256,6 +256,78 @@ function getIntentDefaults(
   }
 }
 
+/*
+ * Semantic confidence gate.
+ *
+ * Similarity scores are only meaningful
+ * relative to each other. A query that
+ * genuinely matches nothing still produces a
+ * ranked list — every memory gets some score
+ * — so an absolute threshold alone either
+ * floods weak queries with noise or silences
+ * strong ones.
+ *
+ * This keeps a semantically-discovered
+ * candidate only when it stands out from the
+ * rest of the vault for this particular
+ * query: at least `SEMANTIC_STANDOUT_SIGMA`
+ * standard deviations above the mean score,
+ * and above an absolute floor.
+ *
+ * Candidates that also matched lexically are
+ * unaffected — they carry their own evidence
+ * and are merged separately.
+ */
+
+const SEMANTIC_ABSOLUTE_FLOOR = 0.18;
+
+const SEMANTIC_STANDOUT_SIGMA = 0.3;
+
+function selectConfidentSemanticCandidates(
+  candidates: {
+    memory: Memory;
+    score: number;
+  }[],
+): {
+  memory: Memory;
+  score: number;
+}[] {
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const scores = candidates.map(
+    (candidate) => candidate.score,
+  );
+
+  const mean =
+    scores.reduce(
+      (total, score) => total + score,
+      0,
+    ) / scores.length;
+
+  const variance =
+    scores.reduce(
+      (total, score) =>
+        total + (score - mean) ** 2,
+      0,
+    ) / scores.length;
+
+  const deviation = Math.sqrt(variance);
+
+  const standoutFloor =
+    mean + SEMANTIC_STANDOUT_SIGMA * deviation;
+
+  const floor = Math.max(
+    SEMANTIC_ABSOLUTE_FLOOR,
+    standoutFloor,
+  );
+
+  return candidates.filter(
+    (candidate) => candidate.score >= floor,
+  );
+}
+
 export async function searchHybrid(
   query: string,
   memories: Memory[],
@@ -446,7 +518,9 @@ export async function searchHybrid(
     mergeSearchCandidates(
       exactResults,
       fuzzyResults,
-      semanticCandidates,
+      selectConfidentSemanticCandidates(
+        semanticCandidates,
+      ),
     );
 
   /*

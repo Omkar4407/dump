@@ -2,6 +2,10 @@ import type {
   Memory,
 } from "@/types/memory";
 
+import {
+  getSearchableCredentialText,
+} from "@/lib/memory/search/credential-fields";
+
 function normalizeText(
   value: string,
 ): string {
@@ -144,11 +148,19 @@ export function buildSemanticText(
    * SECURITY BOUNDARY:
    *
    * Credential secrets are never included
-   * in semantic embeddings.
+   * in semantic embeddings. Only the
+   * service name and username are — the
+   * password and notes never are.
    */
   if (
-    memory.type !== "Credential"
+    memory.type === "Credential"
   ) {
+    appendPart(
+      parts,
+      "Account",
+      getSearchableCredentialText(memory),
+    );
+  } else {
     appendPart(
       parts,
       "Content",
@@ -181,4 +193,171 @@ export function canEmbedMemory(
   return (
     buildSemanticText(memory).length > 0
   );
+}
+
+
+/*
+ * Focused facets of a memory.
+ *
+ * A single embedding of the whole document
+ * dilutes short, conceptual queries: the
+ * identity of a memory ("Shirt measurements")
+ * gets averaged together with its long body
+ * text, and the resulting vector matches a
+ * two-word query weakly.
+ *
+ * Indexing a few focused views alongside the
+ * full document lets retrieval score a query
+ * against whichever part of the memory it
+ * actually refers to. It also gives long
+ * memories a chance: the embedding model
+ * truncates its input, so content past the
+ * limit is invisible unless it is chunked.
+ */
+
+const MAX_CONTENT_CHUNKS = 3;
+
+const CONTENT_CHUNK_SIZE = 480;
+
+function chunkContent(
+  value: string,
+): string[] {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return [];
+  }
+
+  if (
+    normalized.length <= CONTENT_CHUNK_SIZE
+  ) {
+    return [normalized];
+  }
+
+  const chunks: string[] = [];
+
+  for (
+    let start = 0;
+    start < normalized.length &&
+    chunks.length < MAX_CONTENT_CHUNKS;
+    start += CONTENT_CHUNK_SIZE
+  ) {
+    const chunk = normalized
+      .slice(start, start + CONTENT_CHUNK_SIZE)
+      .trim();
+
+    if (chunk) {
+      chunks.push(chunk);
+    }
+  }
+
+  return chunks;
+}
+
+export function buildSemanticFacets(
+  memory: Memory,
+): string[] {
+  const facets: string[] = [];
+
+  /*
+   * Identity facet: what this memory is,
+   * without its body. This is what a short
+   * conceptual query actually looks like.
+   */
+  const identity: string[] = [];
+
+  appendPart(
+    identity,
+    "Type",
+    memory.type,
+  );
+
+  appendPart(
+    identity,
+    "Description",
+    memory.description,
+  );
+
+  appendList(
+    identity,
+    "Tags",
+    memory.tags,
+  );
+
+  if (memory.type === "Credential") {
+    appendPart(
+      identity,
+      "Account",
+      getSearchableCredentialText(memory),
+    );
+  }
+
+  if (identity.length > 0) {
+    facets.push(identity.join("\n"));
+  }
+
+  /*
+   * The bare description carries the
+   * strongest signal for conceptual
+   * queries, so it is also indexed alone.
+   */
+  const description = normalizeText(
+    memory.description,
+  );
+
+  if (description) {
+    facets.push(description);
+  }
+
+  /*
+   * Structural facet.
+   *
+   * A memory's type combined with what it
+   * declares about itself ("Code javascript",
+   * "Image") bridges jargon-heavy content to
+   * domain queries that its prose never uses:
+   * a debounce snippet reads nothing like
+   * "software development", but its structure
+   * does.
+   *
+   * This is only emitted when the structure
+   * carries something distinguishing. A bare
+   * generic type word is close to almost any
+   * query in embedding space, so indexing one
+   * alone would turn every plain memory into
+   * an attractor and destroy precision.
+   */
+  const structural = [
+    ...new Set(
+      [
+        memory.type,
+        ...Object.values(
+          memory.metadata ?? {},
+        ),
+        ...(memory.attachments ?? []).map(
+          (attachment) => attachment.type,
+        ),
+      ]
+        .map(normalizeText)
+        .filter(Boolean),
+    ),
+  ];
+
+  if (structural.length > 1) {
+    facets.push(structural.join(" "));
+  }
+
+  /*
+   * Body facets. Credentials never expose
+   * their payload here.
+   */
+  if (memory.type !== "Credential") {
+    for (
+      const chunk of chunkContent(memory.data)
+    ) {
+      facets.push(chunk);
+    }
+  }
+
+  return [...new Set(facets.filter(Boolean))];
 }

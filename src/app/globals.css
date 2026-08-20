@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-outfit);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-outfit);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -27,6 +27,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -39,8 +40,28 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+
+  /*
+   * DUMP's Memphis palette.
+   *
+   * Every hue has a "deep" partner used as
+   * the extruded 3D edge underneath it.
+   */
+  --color-violet: var(--violet);
+  --color-violet-deep: var(--violet-deep);
+  --color-coral: var(--coral);
+  --color-coral-deep: var(--coral-deep);
+  --color-mint: var(--mint);
+  --color-mint-deep: var(--mint-deep);
+  --color-lemon: var(--lemon);
+  --color-lemon-deep: var(--lemon-deep);
+  --color-sky: var(--sky);
+  --color-sky-deep: var(--sky-deep);
+  --color-ink: var(--ink);
+  --color-cream: var(--cream);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
@@ -49,82 +70,262 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --cream: oklch(0.985 0.014 78);
+  --ink: oklch(0.243 0.079 306);
+
+  --violet: oklch(0.62 0.216 288);
+  --violet-deep: oklch(0.5 0.216 288);
+
+  --coral: oklch(0.712 0.163 22);
+  --coral-deep: oklch(0.6 0.176 22);
+
+  --mint: oklch(0.807 0.145 168);
+  --mint-deep: oklch(0.69 0.14 168);
+
+  --lemon: oklch(0.891 0.163 92);
+  --lemon-deep: oklch(0.79 0.155 92);
+
+  --sky: oklch(0.783 0.13 226);
+  --sky-deep: oklch(0.67 0.14 226);
+
+  --background: var(--cream);
+  --foreground: var(--ink);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: var(--ink);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: var(--ink);
+  --primary: var(--violet);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.955 0.024 300);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(0.955 0.014 78);
+  --muted-foreground: oklch(0.505 0.045 306);
+  --accent: var(--lemon);
+  --accent-foreground: var(--ink);
+  --destructive: oklch(0.585 0.216 22);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.905 0.028 300);
+  --input: oklch(0.905 0.028 300);
+  --ring: var(--violet);
+  --chart-1: var(--violet);
+  --chart-2: var(--coral);
+  --chart-3: var(--mint);
+  --chart-4: var(--lemon);
+  --chart-5: var(--sky);
+  --radius: 0.875rem;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--violet);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: var(--lemon);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: oklch(0.905 0.028 300);
+  --sidebar-ring: var(--violet);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --cream: oklch(0.203 0.045 306);
+  --ink: oklch(0.97 0.014 78);
+
+  --background: var(--cream);
+  --foreground: var(--ink);
+  --card: oklch(0.258 0.05 306);
+  --card-foreground: var(--ink);
+  --popover: oklch(0.258 0.05 306);
+  --popover-foreground: var(--ink);
+  --primary: var(--violet);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.31 0.055 306);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(0.31 0.055 306);
+  --muted-foreground: oklch(0.755 0.035 306);
+  --accent: var(--lemon);
+  --accent-foreground: oklch(0.243 0.079 306);
+  --destructive: oklch(0.64 0.2 22);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.36 0.055 306);
+  --input: oklch(0.36 0.055 306);
+  --ring: var(--violet);
+  --sidebar: oklch(0.258 0.05 306);
+  --sidebar-foreground: var(--ink);
+  --sidebar-border: oklch(0.36 0.055 306);
+}
+
+/*
+ * Soft candy ground.
+ *
+ * Layered radial washes stand in for a mesh
+ * gradient without shipping an image.
+ */
+@utility ground {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(
+      at 8% 4%,
+      color-mix(in oklch, var(--violet) 26%, transparent) 0px,
+      transparent 55%
+    ),
+    radial-gradient(
+      at 92% 8%,
+      color-mix(in oklch, var(--mint) 30%, transparent) 0px,
+      transparent 50%
+    ),
+    radial-gradient(
+      at 78% 92%,
+      color-mix(in oklch, var(--coral) 26%, transparent) 0px,
+      transparent 52%
+    ),
+    radial-gradient(
+      at 20% 88%,
+      color-mix(in oklch, var(--lemon) 30%, transparent) 0px,
+      transparent 50%
+    );
+}
+
+/*
+ * Bento tile.
+ *
+ * A soft-3D slab: a solid colour edge below
+ * the surface plus a wide ambient shadow.
+ */
+@utility tile {
+  --edge: var(--border);
+
+  border-radius: var(--radius-3xl);
+  box-shadow:
+    0 6px 0 0 var(--edge),
+    0 16px 28px -14px color-mix(in oklch, var(--ink) 55%, transparent);
+}
+
+@utility tile-flat {
+  border-radius: var(--radius-3xl);
+  box-shadow: 0 10px 24px -16px
+    color-mix(in oklch, var(--ink) 60%, transparent);
+}
+
+/*
+ * Chunky extruded control.
+ *
+ * Pressing it pushes the surface down into
+ * its own edge, so the button loses height
+ * rather than sliding sideways.
+ */
+@utility press-3d {
+  --edge: var(--border);
+
+  box-shadow:
+    0 5px 0 0 var(--edge),
+    0 10px 18px -10px color-mix(in oklch, var(--ink) 55%, transparent);
+  transition:
+    transform 90ms ease,
+    box-shadow 90ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow:
+      0 1px 0 0 var(--edge),
+      0 3px 8px -6px color-mix(in oklch, var(--ink) 55%, transparent);
+  }
+}
+
+/*
+ * A tile that lifts toward the reader when
+ * pointed at.
+ */
+@utility lift {
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+
+  &:hover {
+    transform: translateY(-3px);
+  }
+}
+
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@utility display {
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+}
+
+/*
+ * The application shell never scrolls.
+ *
+ * Scrolling belongs to individual tiles, so
+ * every screen stays exactly one viewport
+ * tall. `min-height: 0` is what allows a
+ * flex/grid child to shrink instead of
+ * pushing the shell taller than the screen.
+ */
+@utility shell {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+@utility tile-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--ink) 25%, transparent)
+    transparent;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
+
+  html,
+  body {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
+
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
   }
+
   html {
     @apply font-sans;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--violet);
+    outline-offset: 2px;
+  }
+
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  ::selection {
+    background: var(--lemon);
+    color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

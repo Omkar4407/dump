@@ -1,6 +1,10 @@
 import type {
     Memory,
   } from "@/types/memory";
+
+  import {
+    getSearchableCredentialText,
+  } from "@/lib/memory/search/credential-fields";
   
   export type ExactSearchField =
     | "description"
@@ -80,14 +84,21 @@ import type {
         ),
   
       /*
-       * Credential data contains
-       * secrets and must NEVER
+       * Credential secrets must NEVER
        * participate in search.
+       *
+       * Only the service name and the
+       * username are exposed; the
+       * password and notes never are.
        */
       content:
         memory.type ===
         "Credential"
-          ? ""
+          ? normalizeText(
+              getSearchableCredentialText(
+                memory,
+              ),
+            )
           : normalizeText(
               memory.data,
             ),
@@ -421,8 +432,10 @@ import type {
     }
   
     /*
-     * Credential data is already
-     * excluded by getSearchableFields.
+     * Credential secrets are already
+     * excluded by getSearchableFields,
+     * which exposes only the service
+     * name and username.
      */
     const contentScore =
       scoreTextField(

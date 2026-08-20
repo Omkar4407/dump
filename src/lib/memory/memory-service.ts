@@ -1,5 +1,6 @@
 import type {
     Memory,
+    MemoryAttachment,
     MemoryMetadata,
     MemoryType,
     Vault,
@@ -28,14 +29,16 @@ import type {
     description: string;
     tags?: string[];
     metadata?: MemoryMetadata;
+    attachments?: MemoryAttachment[];
   };
-  
+
   export type UpdateMemoryInput = {
     type?: MemoryType;
     data?: string;
     description?: string;
     tags?: string[];
     metadata?: MemoryMetadata;
+    attachments?: MemoryAttachment[];
   };
   
   export type MemorySearchFilters = {
@@ -132,14 +135,74 @@ import type {
   ): string {
     const value =
       data.trim();
-  
+
     if (!value) {
       throw new Error(
         "Memory content cannot be empty.",
       );
     }
-  
+
     return value;
+  }
+
+  /*
+   * Image/File/Audio/Video memories carry
+   * their payload as encrypted attachments,
+   * so their text body is legitimately empty.
+   */
+  function isAttachmentMemoryType(
+    type: MemoryType,
+  ): boolean {
+    return (
+      type === "Image" ||
+      type === "File" ||
+      type === "Audio" ||
+      type === "Video"
+    );
+  }
+
+  function normalizeAttachments(
+    attachments: MemoryAttachment[] = [],
+  ): MemoryAttachment[] {
+    const seen = new Set<string>();
+
+    const normalized:
+      MemoryAttachment[] = [];
+
+    for (
+      const attachment of attachments
+    ) {
+      if (
+        seen.has(attachment.id)
+      ) {
+        continue;
+      }
+
+      seen.add(attachment.id);
+
+      normalized.push(attachment);
+    }
+
+    return normalized;
+  }
+
+  /*
+   * Content is required unless the memory
+   * is carried entirely by its attachments.
+   */
+  function validateMemoryBody(
+    type: MemoryType,
+    data: string,
+    attachments: MemoryAttachment[],
+  ): string {
+    if (
+      isAttachmentMemoryType(type) &&
+      attachments.length > 0
+    ) {
+      return data.trim();
+    }
+
+    return validateData(data);
   }
   
   function validateLink(
@@ -236,17 +299,26 @@ import type {
     description: string;
     tags: string[];
     metadata: MemoryMetadata;
+    attachments: MemoryAttachment[];
   } {
     const description =
       validateDescription(
         input.description,
       );
-  
-    const data =
-      validateData(
-        input.data,
+
+    const attachments =
+      normalizeAttachments(
+        input.attachments,
       );
-  
+
+    const data =
+      validateMemoryBody(
+        input.type,
+        input.data,
+        attachments,
+      );
+
+
     if (
       input.type ===
       "Link"
@@ -285,9 +357,10 @@ import type {
         input.tags,
       ),
       metadata,
+      attachments,
     };
   }
-  
+
   export function createMemoryInVault(
     vault: Vault,
     input: CreateMemoryInput,
@@ -307,6 +380,7 @@ import type {
         validated.description,
         validated.tags,
         validated.metadata,
+        validated.attachments,
       );
   
     const updatedVault =
@@ -865,15 +939,26 @@ import type {
     const nextType =
       updates.type ??
       existing.type;
-  
+
+    const nextAttachments =
+      updates.attachments !==
+      undefined
+        ? normalizeAttachments(
+            updates.attachments,
+          )
+        : (existing.attachments ?? []);
+
     const nextData =
       updates.data !==
       undefined
-        ? validateData(
+        ? validateMemoryBody(
+            nextType,
             updates.data,
+            nextAttachments,
           )
         : existing.data;
-  
+
+
     const nextDescription =
       updates.description !==
       undefined
@@ -941,6 +1026,8 @@ import type {
           tags: nextTags,
           metadata:
             finalMetadata,
+          attachments:
+            nextAttachments,
         },
       );
   

@@ -7,13 +7,30 @@ import {
 } from "@/lib/memory/search/embedding";
 
 import {
+  buildSemanticFacets,
   buildSemanticText,
   canEmbedMemory,
 } from "@/lib/memory/search/semantic-text";
 
 export type SemanticIndexEntry = {
   memoryId: string;
+
+  /*
+   * Embedding of the whole memory document.
+   */
   embedding: Float32Array;
+
+  /*
+   * Embeddings of focused views of the same
+   * memory — its identity, its description
+   * and its content chunks.
+   *
+   * Retrieval scores a query against the
+   * best-matching view instead of against a
+   * single averaged vector.
+   */
+  facetEmbeddings: Float32Array[];
+
   text: string;
 };
 
@@ -105,10 +122,21 @@ export class SemanticIndex {
     const generation =
       this.generation;
 
-    const embedding =
-      await generateEmbedding(
-        text,
+    const facets =
+      buildSemanticFacets(
+        memory,
       );
+
+    const [
+      embedding,
+      ...facetEmbeddings
+    ] = await Promise.all([
+      generateEmbedding(text),
+      ...facets.map(
+        (facet) =>
+          generateEmbedding(facet),
+      ),
+    ]);
 
     /*
      * The index may have been
@@ -132,6 +160,8 @@ export class SemanticIndex {
           memory.id,
 
         embedding,
+
+        facetEmbeddings,
 
         text,
       };

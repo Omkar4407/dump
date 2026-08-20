@@ -1,52 +1,42 @@
 "use client";
 
-import {
-  useState,
-} from "react";
+import { useState } from "react";
+
+import { Paperclip, TriangleAlert, Upload, X } from "lucide-react";
+
+import { MemoryTypeIcon } from "@/components/memory/memory-type-icon";
+
+import { Button } from "@/components/ui/button";
 
 import {
-  Code2,
-  File,
-  FileAudio,
-  FileImage,
-  FileText,
-  KeyRound,
-  Link as LinkIcon,
-  MoreHorizontal,
-  Paperclip,
-  Upload,
-  Video,
-  X,
-} from "lucide-react";
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-import {
-  Button,
-} from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 
-import {
-  Input,
-} from "@/components/ui/input";
-
-import {
-  Textarea,
-} from "@/components/ui/textarea";
+import { MEMORY_TYPES } from "@/types/memory";
 
 import type {
+  AttachmentType,
   Memory,
   MemoryAttachment,
   MemoryType,
 } from "@/types/memory";
 
-import type {
-  AttachmentType,
-} from "@/types/memory";
+import {
+  MEMORY_TYPE_DESCRIPTIONS,
+  MEMORY_TYPE_STYLES,
+  isAttachmentMemoryType,
+  parseCredentialData,
+} from "@/lib/memory/memory-display";
 
 import {
   validateAttachmentFile,
@@ -82,64 +72,11 @@ type MemoryComposerProps = {
   ) => Promise<void>;
 };
 
-const COMPOSER_TYPES: {
-  type: MemoryType;
-  label: string;
-  icon: typeof FileText;
-}[] = [
-  {
-    type: "Text",
-    label: "Text",
-    icon: FileText,
-  },
-  {
-    type: "Link",
-    label: "Link",
-    icon: LinkIcon,
-  },
-  {
-    type: "Code",
-    label: "Code",
-    icon: Code2,
-  },
-  {
-    type: "Credential",
-    label: "Credential",
-    icon: KeyRound,
-  },
-  {
-    type: "Image",
-    label: "Image",
-    icon: FileImage,
-  },
-  {
-    type: "File",
-    label: "File",
-    icon: File,
-  },
-  {
-    type: "Audio",
-    label: "Audio",
-    icon: FileAudio,
-  },
-  {
-    type: "Video",
-    label: "Video",
-    icon: Video,
-  },
-  {
-    type: "Other",
-    label: "Other",
-    icon: MoreHorizontal,
-  },
-];
-
 function isValidUrl(
   value: string,
 ): boolean {
   try {
-    const url =
-      new URL(value);
+    const url = new URL(value);
 
     return (
       url.protocol === "http:" ||
@@ -158,128 +95,38 @@ function parseTags(
       value
         .split(",")
         .map((tag) =>
-          tag
-            .trim()
-            .replace(/^#/, ""),
+          tag.trim().replace(/^#/, ""),
         )
         .filter(Boolean),
     ),
   ];
 }
 
-type CredentialData = {
-  name: string;
-  username: string;
-  password: string;
-  notes: string;
-};
-
-function parseCredentialData(
-  value: string,
-): CredentialData {
-  try {
-    const parsed =
-      JSON.parse(value);
-
-    return {
-      name:
-        typeof parsed.name ===
-        "string"
-          ? parsed.name
-          : "",
-
-      username:
-        typeof parsed.username ===
-        "string"
-          ? parsed.username
-          : "",
-
-      password:
-        typeof parsed.password ===
-        "string"
-          ? parsed.password
-          : "",
-
-      notes:
-        typeof parsed.notes ===
-        "string"
-          ? parsed.notes
-          : "",
-    };
-  } catch {
-    return {
-      name: "",
-      username: "",
-      password: "",
-      notes: "",
-    };
-  }
-}
-
 function getInitialState(
   mode: "create" | "edit",
   memory?: Memory | null,
 ) {
-  if (
-    mode === "edit" &&
-    memory
-  ) {
-    const metadata =
-      memory.metadata ?? {};
+  if (mode === "edit" && memory) {
+    const metadata = memory.metadata ?? {};
 
-    if (
-      memory.type ===
-      "Credential"
-    ) {
-      const credential =
-        parseCredentialData(
-          memory.data,
-        );
+    const isCredential = memory.type === "Credential";
 
-      return {
-        type: memory.type,
-        description:
-          memory.description,
-        data: "",
-        tags: (
-          memory.tags ?? []
-        ).join(", "),
-        codeLanguage:
-          metadata.language ??
-          "plaintext",
-        credentialName:
-          credential.name,
-        credentialUsername:
-          credential.username,
-        credentialPassword:
-          credential.password,
-        credentialNotes:
-          credential.notes,
-        selectedFiles:
-          [] as File[],
-        existingAttachments:
-          (memory.attachments ??
-            []) as MemoryAttachment[],
-      };
-    }
+    const credential = isCredential
+      ? parseCredentialData(memory.data)
+      : null;
 
     return {
       type: memory.type,
-      description:
-        memory.description,
-      data: memory.data,
-      tags: (
-        memory.tags ?? []
-      ).join(", "),
+      description: memory.description,
+      data: isCredential ? "" : memory.data,
+      tags: (memory.tags ?? []).join(", "),
       codeLanguage:
-        metadata.language ??
-        "plaintext",
-      credentialName: "",
-      credentialUsername: "",
-      credentialPassword: "",
-      credentialNotes: "",
-      selectedFiles:
-        [] as File[],
+        metadata.language ?? "plaintext",
+      credentialName: credential?.name ?? "",
+      credentialUsername: credential?.username ?? "",
+      credentialPassword: credential?.password ?? "",
+      credentialNotes: credential?.notes ?? "",
+      selectedFiles: [] as File[],
       existingAttachments:
         (memory.attachments ??
           []) as MemoryAttachment[],
@@ -296,8 +143,7 @@ function getInitialState(
     credentialUsername: "",
     credentialPassword: "",
     credentialNotes: "",
-    selectedFiles:
-      [] as File[],
+    selectedFiles: [] as File[],
     existingAttachments:
       [] as MemoryAttachment[],
   };
@@ -316,22 +162,35 @@ function getAcceptForType(
     case "Video":
       return "video/*";
 
-    case "File":
-      return undefined;
-
     default:
       return undefined;
   }
 }
 
-function isAttachmentMemoryType(
-  type: MemoryType,
-): type is AttachmentType {
+function FieldLabel({
+  htmlFor,
+  children,
+  hint,
+}: {
+  htmlFor: string;
+  children: React.ReactNode;
+  hint?: string;
+}) {
   return (
-    type === "Image" ||
-    type === "File" ||
-    type === "Audio" ||
-    type === "Video"
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <label
+        htmlFor={htmlFor}
+        className="label-mono"
+      >
+        {children}
+      </label>
+
+      {hint && (
+        <span className="label-mono text-muted-foreground">
+          {hint}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -343,59 +202,42 @@ export function MemoryComposer({
   onCreate,
   onUpdate,
 }: MemoryComposerProps) {
-  const [
-    draftKey,
-    setDraftKey,
-  ] = useState(
-    () =>
-      `${mode}:${initialMemory?.id ?? "new"}`,
+  const [draftKey, setDraftKey] = useState(
+    () => `${mode}:${initialMemory?.id ?? "new"}`,
   );
 
-  const [
-    draft,
-    setDraft,
-  ] = useState(() =>
-    getInitialState(
-      mode,
-      initialMemory,
-    ),
+  const [draft, setDraft] = useState(() =>
+    getInitialState(mode, initialMemory),
   );
 
-  const [error, setError] =
+  const [error, setError] = useState("");
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [uploadStatus, setUploadStatus] =
     useState("");
 
-  const [isSaving, setIsSaving] =
+  const [isDragging, setIsDragging] =
     useState(false);
-
-  const [
-    uploadStatus,
-    setUploadStatus,
-  ] = useState("");
 
   const currentKey =
     `${mode}:${initialMemory?.id ?? "new"}`;
 
-  if (
-    draftKey !== currentKey
-  ) {
-    setDraftKey(
-      currentKey,
-    );
+  /*
+   * Reset the draft when the composer is
+   * pointed at a different memory.
+   */
+  if (draftKey !== currentKey) {
+    setDraftKey(currentKey);
 
     setDraft(
-      getInitialState(
-        mode,
-        initialMemory,
-      ),
+      getInitialState(mode, initialMemory),
     );
 
     setError("");
     setUploadStatus("");
+    setIsDragging(false);
     setIsSaving(false);
-  }
-
-  if (!open) {
-    return null;
   }
 
   const {
@@ -412,66 +254,66 @@ export function MemoryComposer({
     existingAttachments,
   } = draft;
 
-  const isEdit =
-    mode === "edit";
+  const isEdit = mode === "edit";
 
   function updateDraft(
     updates: Partial<typeof draft>,
   ) {
-    setDraft(
-      (current) => ({
-        ...current,
-        ...updates,
-      }),
-    );
+    setDraft((current) => ({
+      ...current,
+      ...updates,
+    }));
 
     setError("");
   }
 
-  function handleFileSelection(
-    files: FileList | null,
+  function handleRequestClose() {
+    if (isSaving) {
+      return;
+    }
+
+    onClose();
+  }
+
+  function addFiles(
+    files: FileList | File[] | null,
   ) {
     if (!files) {
       return;
     }
 
-    if (
-      !isAttachmentMemoryType(
-        type,
-      )
-    ) {
+    if (!isAttachmentMemoryType(type)) {
       return;
     }
 
-    const incoming =
-      Array.from(files);
+    const incoming = Array.from(files);
+
+    if (incoming.length === 0) {
+      return;
+    }
 
     try {
-      for (
-        const file of incoming
-      ) {
+      for (const file of incoming) {
         validateAttachmentFile(
           file,
-          type,
+          type as AttachmentType,
         );
       }
 
-      setDraft(
-        (current) => ({
-          ...current,
-          selectedFiles: [
-            ...current.selectedFiles,
-            ...incoming,
-          ],
-        }),
-      );
+      setDraft((current) => ({
+        ...current,
+        selectedFiles: [
+          ...current.selectedFiles,
+          ...incoming,
+        ],
+      }));
 
       setError("");
-    } catch (error) {
+    } catch (validationError) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Invalid attachment.",
+        validationError instanceof Error
+          ? validationError.message
+          : "That file cannot be attached.",
       );
     }
   }
@@ -479,36 +321,27 @@ export function MemoryComposer({
   function removeSelectedFile(
     index: number,
   ) {
-    setDraft(
-      (current) => ({
-        ...current,
-        selectedFiles:
-          current.selectedFiles.filter(
-            (
-              _,
-              currentIndex,
-            ) =>
-              currentIndex !==
-              index,
-          ),
-      }),
-    );
+    setDraft((current) => ({
+      ...current,
+      selectedFiles:
+        current.selectedFiles.filter(
+          (_, currentIndex) =>
+            currentIndex !== index,
+        ),
+    }));
   }
 
   function removeExistingAttachment(
     attachmentId: string,
   ) {
-    setDraft(
-      (current) => ({
-        ...current,
-        existingAttachments:
-          current.existingAttachments.filter(
-            (attachment) =>
-              attachment.id !==
-              attachmentId,
-          ),
-      }),
-    );
+    setDraft((current) => ({
+      ...current,
+      existingAttachments:
+        current.existingAttachments.filter(
+          (attachment) =>
+            attachment.id !== attachmentId,
+        ),
+    }));
 
     setError("");
   }
@@ -517,34 +350,27 @@ export function MemoryComposer({
     attachments: MemoryAttachment[];
     uploadedFileIds: string[];
   }> {
-    if (
-      selectedFiles.length ===
-      0
-    ) {
+    if (selectedFiles.length === 0) {
       return {
         attachments: [],
         uploadedFileIds: [],
       };
     }
 
-    const attachments:
-      MemoryAttachment[] = [];
+    const attachments: MemoryAttachment[] = [];
 
-    const uploadedFileIds:
-      string[] = [];
+    const uploadedFileIds: string[] = [];
 
     try {
       for (
         let index = 0;
-        index <
-        selectedFiles.length;
+        index < selectedFiles.length;
         index++
       ) {
-        const file =
-          selectedFiles[index];
+        const file = selectedFiles[index];
 
         setUploadStatus(
-          `Encrypting and uploading ${index + 1} of ${selectedFiles.length}...`,
+          `Encrypting ${index + 1} of ${selectedFiles.length} — ${file.name}`,
         );
 
         const attachmentId =
@@ -560,15 +386,12 @@ export function MemoryComposer({
           uploaded.fileId,
         );
 
-        const metadata =
+        attachments.push(
           createAttachmentMetadata(
             file,
             uploaded.fileId,
             uploaded.iv,
-          );
-
-        attachments.push(
-          metadata,
+          ),
         );
       }
 
@@ -576,15 +399,10 @@ export function MemoryComposer({
         attachments,
         uploadedFileIds,
       };
-    } catch (error) {
-      for (
-        const fileId of
-        uploadedFileIds
-      ) {
+    } catch (uploadError) {
+      for (const fileId of uploadedFileIds) {
         try {
-          await deleteAttachment(
-            fileId,
-          );
+          await deleteAttachment(fileId);
         } catch {
           console.error(
             "Failed to clean up attachment:",
@@ -593,7 +411,7 @@ export function MemoryComposer({
         }
       }
 
-      throw error;
+      throw uploadError;
     }
   }
 
@@ -606,33 +424,24 @@ export function MemoryComposer({
 
     if (!trimmedDescription) {
       setError(
-        "Give this memory a short description.",
+        "Give this memory a name so you can find it later.",
       );
       return;
     }
 
-    let finalData =
-      data.trim();
+    let finalData = data.trim();
 
-    const metadata: Record<
-      string,
-      string
-    > = {};
+    const metadata: Record<string, string> = {};
 
-    if (
-      type === "Credential"
-    ) {
-      const name =
-        credentialName.trim();
+    if (type === "Credential") {
+      const name = credentialName.trim();
 
       const username =
         credentialUsername.trim();
 
-      const password =
-        credentialPassword;
+      const password = credentialPassword;
 
-      const notes =
-        credentialNotes.trim();
+      const notes = credentialNotes.trim();
 
       if (!name) {
         setError(
@@ -655,24 +464,18 @@ export function MemoryComposer({
         return;
       }
 
-      finalData =
-        JSON.stringify({
-          name,
-          username,
-          password,
-          notes,
-        });
+      finalData = JSON.stringify({
+        name,
+        username,
+        password,
+        notes,
+      });
     }
 
     const isAttachmentType =
-      isAttachmentMemoryType(
-        type,
-      );
+      isAttachmentMemoryType(type);
 
-    if (
-      !isAttachmentType &&
-      !finalData
-    ) {
+    if (!isAttachmentType && !finalData) {
       setError(
         type === "Link"
           ? "Paste a link to save."
@@ -683,10 +486,8 @@ export function MemoryComposer({
 
     if (
       isAttachmentType &&
-      selectedFiles.length ===
-        0 &&
-      existingAttachments.length ===
-        0
+      selectedFiles.length === 0 &&
+      existingAttachments.length === 0
     ) {
       setError(
         `Select at least one ${type.toLowerCase()} file.`,
@@ -704,12 +505,9 @@ export function MemoryComposer({
       return;
     }
 
-    if (
-      type === "Code"
-    ) {
+    if (type === "Code") {
       metadata.language =
-        codeLanguage.trim() ||
-        "plaintext";
+        codeLanguage.trim() || "plaintext";
     }
 
     setIsSaving(true);
@@ -718,50 +516,42 @@ export function MemoryComposer({
       const uploadResult =
         await uploadSelectedFiles();
 
-      const combinedAttachments =
-        [
-          ...existingAttachments,
-          ...uploadResult.attachments,
-        ];
+      const combinedAttachments = [
+        ...existingAttachments,
+        ...uploadResult.attachments,
+      ];
+
+      setUploadStatus(
+        combinedAttachments.length > 0
+          ? "Saving encrypted vault…"
+          : "",
+      );
 
       const input: MemoryInput = {
         type,
         data: finalData,
-        description:
-          trimmedDescription,
+        description: trimmedDescription,
         tags: parseTags(tags),
         metadata,
-        ...(combinedAttachments.length >
-          0 && {
-          attachments:
-            combinedAttachments,
-        }),
+        attachments: combinedAttachments,
       };
 
       try {
-        if (
-          isEdit &&
-          initialMemory &&
-          onUpdate
-        ) {
+        if (isEdit && initialMemory && onUpdate) {
           await onUpdate(
             initialMemory.id,
             input,
           );
         } else {
-          await onCreate(
-            input,
-          );
+          await onCreate(input);
         }
-      } catch (error) {
+      } catch (saveError) {
         for (
           const fileId of
           uploadResult.uploadedFileIds
         ) {
           try {
-            await deleteAttachment(
-              fileId,
-            );
+            await deleteAttachment(fileId);
           } catch {
             console.error(
               "Failed to clean up attachment after save failure:",
@@ -770,66 +560,18 @@ export function MemoryComposer({
           }
         }
 
-        throw error;
-      }
-
-      /*
-       * At this point the vault has
-       * successfully saved the new
-       * attachment list.
-       *
-       * Any existing attachments that
-       * were removed from the editor
-       * can now safely be deleted from
-       * Google Drive.
-       */
-      if (
-        isEdit &&
-        initialMemory?.attachments
-      ) {
-        const nextIds =
-          new Set(
-            combinedAttachments.map(
-              (attachment) =>
-                attachment.id,
-            ),
-          );
-
-        const removedAttachments =
-          initialMemory.attachments.filter(
-            (attachment) =>
-              !nextIds.has(
-                attachment.id,
-              ),
-          );
-
-        for (
-          const attachment of
-          removedAttachments
-        ) {
-          try {
-            await deleteAttachment(
-              attachment.driveFileId,
-            );
-          } catch (error) {
-            console.error(
-              "Failed to delete removed attachment from Google Drive:",
-              attachment.driveFileId,
-              error,
-            );
-          }
-        }
+        throw saveError;
       }
 
       setUploadStatus("");
       onClose();
-    } catch (error) {
+    } catch (saveError) {
       setUploadStatus("");
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save memory.",
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save this memory.",
       );
     } finally {
       setIsSaving(false);
@@ -837,93 +579,94 @@ export function MemoryComposer({
   }
 
   function renderAttachmentField() {
-    if (
-      !isAttachmentMemoryType(
-        type,
-      )
-    ) {
+    if (!isAttachmentMemoryType(type)) {
       return null;
     }
 
+    const totalAttachments =
+      existingAttachments.length +
+      selectedFiles.length;
+
     return (
-      <div className="space-y-4 rounded-lg border p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium">
-              {type} Attachment
-            </p>
+      <div className="flex flex-col gap-4">
+        <FieldLabel
+          htmlFor="memory-attachment"
+          hint={
+            totalAttachments > 0
+              ? `${totalAttachments} attached`
+              : "Max 100 MB per file"
+          }
+        >
+          {type} files
+        </FieldLabel>
 
-            <p className="mt-1 text-xs text-muted-foreground">
-              Files are encrypted on your device before upload.
-            </p>
-          </div>
-
-          <Paperclip className="size-4 text-muted-foreground" />
-        </div>
-
-        {existingAttachments.length >
-          0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium">
-              Existing attachments
-            </p>
-
+        {existingAttachments.length > 0 && (
+          <ul className="flex flex-col gap-2">
             {existingAttachments.map(
               (attachment) => (
-                <div
-                  key={
-                    attachment.id
-                  }
-                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                <li
+                  key={attachment.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-secondary px-4 py-2.5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm">
-                      {
-                        attachment.fileName
-                      }
+                    <p className="truncate text-sm font-bold">
+                      {attachment.fileName}
                     </p>
 
-                    <p className="text-xs text-muted-foreground">
-                      {formatAttachmentSize(
-                        attachment.size,
-                      )}
+                    <p className="label-mono mt-0.5 text-muted-foreground">
+                      Saved · {formatAttachmentSize(attachment.size)}
                     </p>
                   </div>
 
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
+                    size="icon-sm"
                     onClick={() =>
                       removeExistingAttachment(
                         attachment.id,
                       )
                     }
-                    disabled={
-                      isSaving
-                    }
+                    disabled={isSaving}
                     aria-label={`Remove ${attachment.fileName}`}
                   >
-                    <X className="size-4" />
+                    <X className="size-4" aria-hidden="true" />
                   </Button>
-                </div>
+                </li>
               ),
             )}
-          </div>
+          </ul>
         )}
 
         <label
           htmlFor="memory-attachment"
-          className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center transition-colors hover:bg-muted/50"
-        >
-          <Upload className="mb-2 size-5 text-muted-foreground" />
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
 
-          <span className="text-sm font-medium">
-            Choose {type.toLowerCase()} files
+            if (!isSaving) {
+              addFiles(event.dataTransfer.files);
+            }
+          }}
+          className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed p-6 text-center transition-colors ${
+            isDragging
+              ? "border-violet bg-violet/15"
+              : "border-border bg-secondary/60 hover:border-violet hover:bg-violet/10"
+          }`}
+        >
+          <Upload className="size-6 text-violet" aria-hidden="true" />
+
+          <span className="display text-lg">
+            Drop {type.toLowerCase()} files
           </span>
 
-          <span className="mt-1 text-xs text-muted-foreground">
-            Maximum 100 MB per file
+          <span className="label-mono text-muted-foreground">
+            or click to choose · encrypted on your device
           </span>
 
           <input
@@ -931,192 +674,155 @@ export function MemoryComposer({
             type="file"
             className="sr-only"
             multiple
-            accept={getAcceptForType(
-              type,
-            )}
-            onChange={(
-              event,
-            ) => {
-              handleFileSelection(
-                event.target.files,
-              );
+            accept={getAcceptForType(type)}
+            onChange={(event) => {
+              addFiles(event.target.files);
 
-              event.target.value =
-                "";
+              event.target.value = "";
             }}
             disabled={isSaving}
           />
         </label>
 
-        {selectedFiles.length >
-          0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium">
+        {selectedFiles.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="label-mono text-muted-foreground">
               Ready to upload
             </p>
 
-            {selectedFiles.map(
-              (
-                file,
-                index,
-              ) => (
-                <div
+            <ul className="flex flex-col gap-2">
+              {selectedFiles.map((file, index) => (
+                <li
                   key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-mint/20 px-4 py-2.5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm">
+                    <p className="truncate text-sm font-bold">
                       {file.name}
                     </p>
 
-                    <p className="text-xs text-muted-foreground">
-                      {formatAttachmentSize(
-                        file.size,
-                      )}
+                    <p className="label-mono mt-0.5 text-muted-foreground">
+                      {formatAttachmentSize(file.size)}
                     </p>
                   </div>
 
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
+                    size="icon-sm"
                     onClick={() =>
-                      removeSelectedFile(
-                        index,
-                      )
+                      removeSelectedFile(index)
                     }
-                    disabled={
-                      isSaving
-                    }
+                    disabled={isSaving}
                     aria-label={`Remove ${file.name}`}
                   >
-                    <X className="size-4" />
+                    <X className="size-4" aria-hidden="true" />
                   </Button>
-                </div>
-              ),
-            )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
-        {uploadStatus && (
-          <p className="text-xs text-muted-foreground">
-            {uploadStatus}
+        <div className="flex items-center gap-2">
+          <Paperclip
+            className="size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+
+          <p className="label-mono text-muted-foreground">
+            Files are encrypted before they leave your device
           </p>
-        )}
+        </div>
       </div>
     );
   }
 
   function renderContentField() {
-    if (
-      isAttachmentMemoryType(
-        type,
-      )
-    ) {
+    if (isAttachmentMemoryType(type)) {
       return renderAttachmentField();
     }
 
-    if (
-      type === "Credential"
-    ) {
+    if (type === "Credential") {
       return (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label
-              htmlFor="credential-name"
-              className="text-sm font-medium"
-            >
-              Credential Name
-            </label>
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <FieldLabel htmlFor="credential-name">
+              Service
+            </FieldLabel>
 
             <Input
               id="credential-name"
               placeholder="GitHub"
-              value={
-                credentialName
-              }
-              onChange={(
-                event,
-              ) =>
+              value={credentialName}
+              onChange={(event) =>
                 updateDraft({
                   credentialName:
                     event.target.value,
                 })
               }
               disabled={isSaving}
+              autoComplete="off"
             />
           </div>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="credential-username"
-              className="text-sm font-medium"
-            >
+          <div className="flex flex-col gap-2">
+            <FieldLabel htmlFor="credential-username">
               Username / Email
-            </label>
+            </FieldLabel>
 
             <Input
               id="credential-username"
               placeholder="you@example.com"
-              value={
-                credentialUsername
-              }
-              onChange={(
-                event,
-              ) =>
+              value={credentialUsername}
+              onChange={(event) =>
                 updateDraft({
                   credentialUsername:
                     event.target.value,
                 })
               }
               disabled={isSaving}
+              autoComplete="off"
             />
           </div>
 
-          <div className="space-y-2">
-            <label
+          <div className="flex flex-col gap-2">
+            <FieldLabel
               htmlFor="credential-password"
-              className="text-sm font-medium"
+              hint="Encrypted"
             >
               Password
-            </label>
+            </FieldLabel>
 
             <Input
               id="credential-password"
               type="password"
-              placeholder="Credential password"
-              value={
-                credentialPassword
-              }
-              onChange={(
-                event,
-              ) =>
+              placeholder="••••••••••••"
+              value={credentialPassword}
+              onChange={(event) =>
                 updateDraft({
                   credentialPassword:
                     event.target.value,
                 })
               }
               disabled={isSaving}
+              autoComplete="new-password"
             />
           </div>
 
-          <div className="space-y-2">
-            <label
+          <div className="flex flex-col gap-2">
+            <FieldLabel
               htmlFor="credential-notes"
-              className="text-sm font-medium"
+              hint="Optional"
             >
               Notes
-            </label>
+            </FieldLabel>
 
             <Textarea
               id="credential-notes"
-              placeholder="Optional notes"
-              value={
-                credentialNotes
-              }
-              onChange={(
-                event,
-              ) =>
+              placeholder="Recovery codes, security questions, anything else."
+              value={credentialNotes}
+              onChange={(event) =>
                 updateDraft({
                   credentialNotes:
                     event.target.value,
@@ -1130,28 +836,19 @@ export function MemoryComposer({
       );
     }
 
-    if (
-      type === "Code"
-    ) {
+    if (type === "Code") {
       return (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label
-              htmlFor="code-language"
-              className="text-sm font-medium"
-            >
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <FieldLabel htmlFor="code-language">
               Language
-            </label>
+            </FieldLabel>
 
             <Input
               id="code-language"
-              placeholder="python"
-              value={
-                codeLanguage
-              }
-              onChange={(
-                event,
-              ) =>
+              placeholder="typescript"
+              value={codeLanguage}
+              onChange={(event) =>
                 updateDraft({
                   codeLanguage:
                     event.target.value,
@@ -1161,67 +858,52 @@ export function MemoryComposer({
             />
           </div>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="memory-data"
-              className="text-sm font-medium"
-            >
+          <div className="flex flex-col gap-2">
+            <FieldLabel htmlFor="memory-data">
               Code
-            </label>
+            </FieldLabel>
 
             <Textarea
               id="memory-data"
-              placeholder="Paste your code..."
+              placeholder="Paste your snippet…"
               value={data}
-              onChange={(
-                event,
-              ) =>
+              onChange={(event) =>
                 updateDraft({
-                  data:
-                    event.target.value,
+                  data: event.target.value,
                 })
               }
               disabled={isSaving}
               rows={12}
-              className="font-mono text-sm"
+              className="min-h-48 font-mono text-sm"
+              spellCheck={false}
             />
           </div>
         </div>
       );
     }
 
-    if (
-      type === "Link"
-    ) {
+    if (type === "Link") {
       return (
-        <div className="space-y-2">
-          <label
-            htmlFor="memory-data"
-            className="text-sm font-medium"
-          >
+        <div className="flex flex-col gap-2">
+          <FieldLabel htmlFor="memory-data">
             Link
-          </label>
+          </FieldLabel>
 
           <Input
             id="memory-data"
             type="url"
+            inputMode="url"
             placeholder="https://example.com"
             value={data}
-            onChange={(
-              event,
-            ) =>
+            onChange={(event) =>
               updateDraft({
-                data:
-                  event.target.value,
+                data: event.target.value,
               })
             }
             disabled={isSaving}
-            onKeyDown={(
-              event,
-            ) => {
+            onKeyDown={(event) => {
               if (
-                event.key ===
-                  "Enter" &&
+                event.key === "Enter" &&
                 !event.shiftKey
               ) {
                 event.preventDefault();
@@ -1234,192 +916,237 @@ export function MemoryComposer({
     }
 
     return (
-      <div className="space-y-2">
-        <label
-          htmlFor="memory-data"
-          className="text-sm font-medium"
-        >
-          {type === "Other"
-            ? "Content"
-            : "Memory"}
-        </label>
+      <div className="flex flex-col gap-2">
+        <FieldLabel htmlFor="memory-data">
+          {type === "Other" ? "Content" : "Memory"}
+        </FieldLabel>
 
         <Textarea
           id="memory-data"
           placeholder={
             type === "Other"
-              ? "Dump anything else..."
-              : "Dump anything you want to remember..."
+              ? "Dump anything else…"
+              : "Dump anything you want to remember…"
           }
           value={data}
-          onChange={(
-            event,
-          ) =>
+          onChange={(event) =>
             updateDraft({
-              data:
-                event.target.value,
+              data: event.target.value,
             })
           }
           disabled={isSaving}
           rows={7}
+          className="min-h-40"
         />
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-6 backdrop-blur-sm">
-      <Card className="my-8 w-full max-w-xl shadow-xl">
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <CardTitle>
-            {isEdit
-              ? "Edit Memory"
-              : "Add Memory"}
-          </CardTitle>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          handleRequestClose();
+        }
+      }}
+    >
+      <DialogContent
+        size="md"
+        aria-describedby={undefined}
+        onInteractOutside={(event) => {
+          if (isSaving) {
+            event.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(event) => {
+          if (isSaving) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <DialogHeader className="bg-violet/12">
+          <div className="min-w-0">
+            <p className="label-mono text-muted-foreground">
+              {isEdit ? "Edit" : "New"}
+            </p>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
+            <DialogTitle className="mt-1.5">
+              {isEdit ? "Edit memory" : "Dump something."}
+            </DialogTitle>
+          </div>
+
+          <DialogCloseButton
+            label="Close composer"
             disabled={isSaving}
-            aria-label="Close"
-          >
-            <X className="size-4" />
-          </Button>
-        </CardHeader>
+          />
+        </DialogHeader>
 
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {COMPOSER_TYPES.map(
-              ({
-                type: memoryType,
-                label,
-                icon: Icon,
-              }) => {
-                const selected =
-                  type ===
-                  memoryType;
+        <DialogBody className="flex flex-col gap-7">
+          <fieldset
+            className="flex flex-col gap-3"
+            disabled={isSaving}
+          >
+            <legend className="label-mono mb-3 text-muted-foreground">
+              01 — What is it?
+            </legend>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {MEMORY_TYPES.map((memoryType) => {
+                const selected = type === memoryType;
+
+                const style =
+                  MEMORY_TYPE_STYLES[memoryType];
 
                 return (
-                  <Button
-                    key={
-                      memoryType
-                    }
+                  <button
+                    key={memoryType}
                     type="button"
-                    variant={
-                      selected
-                        ? "default"
-                        : "outline"
-                    }
-                    className="h-12 justify-start"
+                    aria-pressed={selected}
                     onClick={() =>
                       updateDraft({
                         type: memoryType,
-                        selectedFiles:
-                          [],
+                        selectedFiles: [],
                       })
                     }
-                    disabled={
-                      isSaving
-                    }
+                    disabled={isSaving}
+                    className={`flex min-w-0 flex-col items-start gap-1.5 rounded-2xl p-2.5 text-left transition-all outline-none disabled:pointer-events-none disabled:opacity-45 ${
+                      selected
+                        ? `${style.chip} shadow-[0_4px_0_0_var(--edge)] ${style.edge}`
+                        : "bg-secondary text-foreground hover:bg-violet/12"
+                    }`}
                   >
-                    <Icon className="mr-2 size-4" />
-                    {label}
-                  </Button>
-                );
-              },
-            )}
-          </div>
+                    <MemoryTypeIcon
+                      type={memoryType}
+                      className="size-4 shrink-0"
+                    />
 
-          <div className="space-y-2">
-            <label
-              htmlFor="memory-description"
-              className="text-sm font-medium"
-            >
+                    <span className="label-mono w-full truncate">
+                      {memoryType}
+                    </span>
+
+                    <span
+                      className={`w-full truncate text-[0.6875rem] ${
+                        selected
+                          ? "opacity-75"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {MEMORY_TYPE_DESCRIPTIONS[memoryType]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <div className="flex flex-col gap-2">
+            <p className="label-mono text-muted-foreground">
+              02 — Name it
+            </p>
+
+            <FieldLabel htmlFor="memory-description">
               Description
-            </label>
+            </FieldLabel>
 
             <Input
               id="memory-description"
               placeholder="What is this?"
-              value={
-                description
-              }
-              onChange={(
-                event,
-              ) =>
+              value={description}
+              onChange={(event) =>
                 updateDraft({
-                  description:
-                    event.target.value,
+                  description: event.target.value,
                 })
               }
               disabled={isSaving}
-              autoFocus
+              className="text-lg font-bold"
             />
           </div>
 
-          {renderContentField()}
+          <div className="flex flex-col gap-2">
+            <p className="label-mono text-muted-foreground">
+              03 — Content
+            </p>
 
-          <div className="space-y-2">
-            <label
+            {renderContentField()}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="label-mono text-muted-foreground">
+              04 — Tags
+            </p>
+
+            <FieldLabel
               htmlFor="memory-tags"
-              className="text-sm font-medium"
+              hint="Optional"
             >
               Tags
-            </label>
+            </FieldLabel>
 
             <Input
               id="memory-tags"
               placeholder="college, project, important"
               value={tags}
-              onChange={(
-                event,
-              ) =>
+              onChange={(event) =>
                 updateDraft({
-                  tags:
-                    event.target.value,
+                  tags: event.target.value,
                 })
               }
               disabled={isSaving}
             />
 
-            <p className="text-xs text-muted-foreground">
-              Separate tags with commas.
+            <p className="label-mono text-muted-foreground">
+              Separate with commas · you never have to organize
             </p>
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">
-              {error}
+          {uploadStatus && (
+            <p
+              className="label-mono rounded-2xl bg-mint/30 px-4 py-3 text-ink"
+              role="status"
+            >
+              {uploadStatus}
             </p>
           )}
 
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              disabled={isSaving}
+          {error && (
+            <p
+              className="flex items-start gap-2 rounded-2xl bg-destructive/10 px-4 py-3 text-sm font-semibold text-destructive"
+              role="alert"
             >
-              Cancel
-            </Button>
+              <TriangleAlert
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              {error}
+            </p>
+          )}
+        </DialogBody>
 
-            <Button
-              onClick={
-                handleSave
-              }
-              disabled={isSaving}
-            >
-              {isSaving
-                ? uploadStatus
-                  ? "Uploading..."
-                  : "Saving..."
-                : isEdit
-                  ? "Save Changes"
-                  : "Save Memory"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleRequestClose}
+            disabled={isSaving}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving
+              ? "Saving…"
+              : isEdit
+                ? "Save changes"
+                : "Save memory"}
+            <span aria-hidden="true">→</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
