@@ -107,6 +107,66 @@ function validateAttachmentId(
   }
 }
 
+type DriveErrorPayload = {
+  error?: {
+    message?: string;
+    status?: string;
+    errors?: Array<{
+      reason?: string;
+    }>;
+  };
+};
+
+/*
+ * Carries the upstream Google Drive
+ * status and machine-readable reason so
+ * the API layer can turn a failure into
+ * an actionable message instead of an
+ * opaque 500.
+ */
+export class DriveApiError
+  extends Error {
+  readonly status: number;
+  readonly reason: string;
+
+  constructor(
+    status: number,
+    reason: string,
+    operation: string,
+  ) {
+    super(
+      `Google Drive ${operation} failed (${status}/${reason}).`,
+    );
+
+    this.name =
+      "DriveApiError";
+
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
+function parseDriveErrorReason(
+  errorText: string,
+): string {
+  try {
+    const payload =
+      JSON.parse(
+        errorText,
+      ) as DriveErrorPayload;
+
+    return (
+      payload.error
+        ?.errors?.[0]
+        ?.reason ||
+      payload.error?.status ||
+      "unknown"
+    );
+  } catch {
+    return "unknown";
+  }
+}
+
 async function handleDriveResponse(
   response: Response,
   operation: string,
@@ -118,41 +178,22 @@ async function handleDriveResponse(
   const errorText =
     await response.text();
 
+  const reason =
+    parseDriveErrorReason(
+      errorText,
+    );
+
   console.error(
     `Google Drive ${operation} failed:`,
     response.status,
+    reason,
     errorText,
   );
 
-  if (
-    response.status ===
-    401
-  ) {
-    throw new Error(
-      "Google Drive authorization has expired.",
-    );
-  }
-
-  if (
-    response.status ===
-    403
-  ) {
-    throw new Error(
-      "Google Drive access was denied.",
-    );
-  }
-
-  if (
-    response.status ===
-    404
-  ) {
-    throw new Error(
-      "Google Drive file was not found.",
-    );
-  }
-
-  throw new Error(
-    `Google Drive ${operation} failed (${response.status}).`,
+  throw new DriveApiError(
+    response.status,
+    reason,
+    operation,
   );
 }
 

@@ -3,6 +3,7 @@ import "server-only";
 import { auth } from "@/auth";
 
 import {
+  DriveApiError,
   createAttachmentFile,
   createVaultFile,
   deleteAttachmentFile,
@@ -26,8 +27,10 @@ async function getAccessToken(): Promise<string> {
       "string" ||
     !accessToken
   ) {
-    throw new Error(
-      "Google Drive authorization is unavailable.",
+    throw new DriveApiError(
+      401,
+      "missingAccessToken",
+      "authorization lookup",
     );
   }
 

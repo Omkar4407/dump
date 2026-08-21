@@ -9,6 +9,8 @@ import {
   updateUserVaultFile,
 } from "@/lib/google/authenticated-drive";
 
+import { DriveApiError } from "@/lib/google/drive";
+
 import type { EncryptedVault } from "@/lib/crypto/vault";
 
 type VaultRequestBody = {
@@ -312,6 +314,63 @@ class RequestValidationError
   }
 }
 
+/*
+ * Google's machine-readable reasons are
+ * mapped to messages the user can act on.
+ *
+ * The reason itself is appended so that a
+ * report from a user is enough to identify
+ * the failure without server log access.
+ */
+function driveErrorMessage(
+  error: DriveApiError,
+): string {
+  switch (error.reason) {
+    case "missingAccessToken":
+    case "authError":
+    case "UNAUTHENTICATED":
+      return "Your Google sign-in has expired. Sign out and sign in again.";
+
+    case "storageQuotaExceeded":
+      return "Your Google Drive storage is full. Free up space and try again.";
+
+    case "insufficientPermissions":
+    case "insufficientFilePermissions":
+    case "forbidden":
+      return "DUMP was not allowed to create files in your Google Drive. Sign out, sign in again, and make sure the Google Drive permission stays checked on the consent screen.";
+
+    case "accessNotConfigured":
+      return "The Google Drive API is not enabled for this app.";
+
+    case "rateLimitExceeded":
+    case "userRateLimitExceeded":
+      return "Google Drive is rate limiting requests. Wait a moment and try again.";
+
+    default:
+      return `Google Drive rejected the request (${error.status}/${error.reason}).`;
+  }
+}
+
+function driveErrorStatus(
+  error: DriveApiError,
+): number {
+  if (
+    error.status === 401 ||
+    error.status === 403
+  ) {
+    return error.status;
+  }
+
+  /*
+   * Anything else is an upstream failure.
+   *
+   * Drive's own 404 is deliberately not
+   * forwarded, because the client treats a
+   * 404 as "the vault file is gone".
+   */
+  return 502;
+}
+
 function handleError(
   error: unknown,
   fallbackMessage: string,
@@ -333,6 +392,25 @@ function handleError(
     `DUMP vault API error:`,
     error,
   );
+
+  if (
+    error instanceof
+    DriveApiError
+  ) {
+    return jsonResponse(
+      {
+        error:
+          driveErrorMessage(
+            error,
+          ),
+        reason:
+          error.reason,
+      },
+      driveErrorStatus(
+        error,
+      ),
+    );
+  }
 
   /*
    * Do not expose arbitrary internal
@@ -441,13 +519,10 @@ export async function GET() {
       fileId: file.id,
       vault,
     });
-  } catch {
-    return jsonResponse(
-      {
-        error:
-          "Failed to load vault.",
-      },
-      500,
+  } catch (error) {
+    return handleError(
+      error,
+      "Failed to load vault.",
     );
   }
 }
